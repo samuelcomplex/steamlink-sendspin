@@ -68,7 +68,8 @@ the speaker takes over. The TV keeps showing the last frame; that's expected.
 When the TV or receiver is switched off and on again, HDMI has to be set up again. The speaker
 notices, lets the Steam Link interface start for about 10 seconds to do that, and then takes
 over again, so there's no need to restart the Steam Link. It stays connected to Music Assistant
-meanwhile: music already playing pauses for those seconds and then continues.
+meanwhile, so nothing stops: that speaker is silent for those seconds and then rejoins in sync,
+and other speakers in the same group keep playing.
 
 From the app's **Manage** section, or with the script:
 
