@@ -18,6 +18,17 @@ static constexpr size_t RING_CAPACITY = 32768;
 // Frames per SDL callback. 1024 frames is ~21 ms at 48 kHz.
 static constexpr uint16_t SDL_BUFFER_FRAMES = 1024;
 
+// How the firmware's SDL2 "marvell" driver paces the callback (from its WaitDevice/PlayDevice):
+// it keeps a target time T at which the media server's queue will be down to one buffer,
+// re-measures the queue about once a second, sleeps until T - 24 ms (millisecond timers), then
+// asks for the next buffer and adds one buffer length to T. So the buffer filled now starts
+// playing at T + one buffer, about 24 ms + one buffer after the callback, and the callback's
+// own start time wobbles by a few ms with scheduling, while T doesn't.
+static constexpr double DRIVER_LEAD_US = 24000.0;
+// Callback timing further off the schedule than this means the schedule itself moved (device
+// reopened, underrun, the driver's resync): start over from the measured time.
+static constexpr double RESYNC_US = 40000.0;
+
 SdlSink::SdlSink() : buffer_(RING_CAPACITY), capacity_(RING_CAPACITY) {}
 
 SdlSink::~SdlSink() {
@@ -101,6 +112,7 @@ bool SdlSink::configure(uint32_t sample_rate, uint8_t channels, uint8_t bits_per
     // allowed_changes = 0: SDL converts to whatever the hardware runs at, so the ring always
     // carries exactly the stream format.
     ring_reset_();
+    sched_valid_ = false;
     sample_rate_ = sample_rate;
     channels_ = channels;
     bits_ = bits_per_sample;
@@ -202,15 +214,59 @@ void SdlSink::sdl_callback(void* userdata, uint8_t* stream, int len) {
 
     self->write_cv_.notify_one();
 
+    // Follow the driver's steady schedule rather than the raw callback time: the raw time
+    // wobbles by several ms, and the library treats any jump over 5 ms as lost sync (a hard
+    // correction, which is an audible click). Callbacks come one buffer apart on the media
+    // server's clock; late wake-ups are common and early ones aren't, so the estimate follows
+    // early callbacks quickly and late ones slowly (the lower edge is the real schedule).
+    if (self->bytes_per_frame_ > 0 && self->sample_rate_ > 0) {
+        double period_us = static_cast<double>(want / self->bytes_per_frame_) * 1e6 /
+                           static_cast<double>(self->sample_rate_);
+        double t = static_cast<double>(now_us);
+        if (!self->sched_valid_) {
+            self->sched_us_ = t;
+            self->sched_valid_ = true;
+        } else {
+            double predicted = self->sched_us_ + period_us;
+            double err = t - predicted;
+            if (err > RESYNC_US || err < -RESYNC_US) {
+                self->sched_us_ = t;
+                self->stat_resyncs_.fetch_add(1, std::memory_order_relaxed);
+            } else {
+                self->sched_us_ = predicted + (err < 0 ? err / 8 : err / 64);
+                int64_t late = static_cast<int64_t>(t - self->sched_us_);
+                if (late > self->stat_max_late_us_.load(std::memory_order_relaxed)) {
+                    self->stat_max_late_us_.store(late, std::memory_order_relaxed);
+                }
+                if (late > 5000) self->stat_over_5ms_.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        self->stat_callbacks_.fetch_add(1, std::memory_order_relaxed);
+    }
+
     if (got > 0 && self->bytes_per_frame_ > 0 && self->on_frames_played) {
         uint32_t frames = static_cast<uint32_t>(got / self->bytes_per_frame_);
-        // The buffer SDL asked for starts playing once the one already queued has drained, and
-        // the frames we wrote sit at its start.
-        int64_t finish = now_us + self->device_buffer_us_ +
+        // The frames we wrote sit at the start of this buffer, which starts playing one queued
+        // buffer after the driver's target time.
+        int64_t finish = static_cast<int64_t>(self->sched_us_ + DRIVER_LEAD_US) +
+                         self->device_buffer_us_ +
                          static_cast<int64_t>(frames) * 1000000 / self->sample_rate_ +
                          self->extra_latency_us;
         self->on_frames_played(frames, finish);
     }
+}
+
+std::string SdlSink::take_timing_report() {
+    uint32_t n = stat_callbacks_.exchange(0, std::memory_order_relaxed);
+    int64_t late = stat_max_late_us_.exchange(0, std::memory_order_relaxed);
+    uint32_t over = stat_over_5ms_.exchange(0, std::memory_order_relaxed);
+    uint32_t resyncs = stat_resyncs_.exchange(0, std::memory_order_relaxed);
+    char buf[160];
+    snprintf(buf, sizeof buf,
+             "audio timing: %u callbacks, up to %.1f ms late, %u over 5 ms (smoothed out), "
+             "%u schedule resets",
+             n, static_cast<double>(late) / 1000.0, over, resyncs);
+    return buf;
 }
 
 // ---------------------------------------------------------------- volume

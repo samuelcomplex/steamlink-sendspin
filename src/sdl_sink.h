@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace sl {
@@ -40,6 +41,9 @@ public:
     void set_volume(uint8_t volume);
     void set_muted(bool muted);
 
+    /// One line about the audio callback's timing since the last call (for the log).
+    std::string take_timing_report();
+
 private:
     static void sdl_callback(void* userdata, uint8_t* stream, int len);
     size_t ring_write_(const uint8_t* data, size_t len);
@@ -65,6 +69,14 @@ private:
     uint8_t bits_{0};
     size_t bytes_per_frame_{0};
     int64_t device_buffer_us_{0};
+
+    // Smoothed schedule of the audio callback (client clock, us); see sdl_callback().
+    bool sched_valid_{false};
+    double sched_us_{0};
+    std::atomic<int64_t> stat_max_late_us_{0};
+    std::atomic<uint32_t> stat_callbacks_{0};
+    std::atomic<uint32_t> stat_over_5ms_{0};
+    std::atomic<uint32_t> stat_resyncs_{0};
 
     uint8_t volume_{100};
     bool muted_{false};

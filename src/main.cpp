@@ -367,6 +367,8 @@ int main(int argc, char* argv[]) {
     auto disconnected_since = clock::now();
     bool was_connected = false;
     int tick = 0;
+    auto last_report = clock::now();
+    int reports = 0;
     while (running.load()) {
         client.loop();
         if (window && (++tick % 10) == 0) sl::sdl.PumpEvents();
@@ -386,6 +388,13 @@ int main(int argc, char* argv[]) {
                 client.connect_to(url);
                 last_dial = now;
             }
+        }
+        // Audio timing in the log: every minute for the first ten, then every ten minutes.
+        auto since = clock::now() - last_report;
+        if (since > std::chrono::minutes(reports < 10 ? 1 : 10)) {
+            fprintf(stderr, "%s\n", sink.take_timing_report().c_str());
+            last_report = clock::now();
+            ++reports;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }

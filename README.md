@@ -131,6 +131,12 @@ network blocks that kind of discovery, install again to set the new address.)
 
 **This speaker is out of sync with the others.** Set the player's delay in Music Assistant, or
 `LATENCY_MS` in `/mnt/scratch/sendspin/sendspin.conf` on the Steam Link, then restart the player.
+The TV or receiver adds its own delay (more with picture processing on; a "game" mode or
+audio-only input helps), which the Steam Link can't measure.
+
+**Clicks or short dropouts.** Each one shows in the player log as `Lost sync (... off)`. The log
+also gets an `audio timing` line every minute for the first ten minutes; please include a few of
+them if you report this.
 
 **Back to normal, whatever state it's in.** Use **Remove from Steam Link** (or `uninstall`). As
 a last resort, the Steam Link's own factory reset works too: an empty `factory_reset.txt` in a
@@ -166,6 +172,10 @@ encrypted handshake with the newer server library but hasn't been tested end to 
   the interface comes back. When the media server logs a display reconnect (`HPD detected` in
   `/mnt/scratch/log/PE_server.log`) and the link has settled, it briefly resumes the interface
   so HDMI is set up again, then restarts the player.
+- **Timing:** the firmware's SDL driver hands audio to the media server about 24 ms plus one
+  buffer before it plays, on a steady schedule, but its callback wakes up a few ms late now and
+  then. The player follows the steady schedule instead of the wake-up time, because the library
+  treats any 5 ms jump as lost sync and corrects it audibly.
 - **Rejoining:** the player always says goodbye with the reason `restart`, never `shutdown`. Music
   Assistant then keeps it in its group for a few minutes and puts it straight back into a running
   stream when it reconnects; after `shutdown` it would forget the group.
