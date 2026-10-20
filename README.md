@@ -125,6 +125,10 @@ starting sendspin-steamlink
 
 The `trace` command (script) shows the supervisor's step-by-step trace if it stops earlier.
 
+**Music Assistant moved to another address.** Nothing to do: when the old address stops
+answering, the speaker finds Music Assistant on the network within about two minutes. (If your
+network blocks that kind of discovery, install again to set the new address.)
+
 **This speaker is out of sync with the others.** Set the player's delay in Music Assistant, or
 `LATENCY_MS` in `/mnt/scratch/sendspin/sendspin.conf` on the Steam Link, then restart the player.
 
@@ -165,9 +169,10 @@ encrypted handshake with the newer server library but hasn't been tested end to 
 - **Rejoining:** the player always says goodbye with the reason `restart`, never `shutdown`. Music
   Assistant then keeps it in its group for a few minutes and puts it straight back into a running
   stream when it reconnects; after `shutdown` it would forget the group.
-- **Finding Music Assistant:** without a configured address, the player asks the network over
-  mDNS for `_sendspin-server._tcp`, which Music Assistant announces, and asks again whenever it's
-  disconnected.
+- **Finding Music Assistant:** the player dials the address it was set up with. Without one, or
+  when that address hasn't answered for a minute (Music Assistant moved to a new address), it
+  asks the network over mDNS for `_sendspin-server._tcp`, which Music Assistant announces, and
+  switches to what it finds.
 - **On the Steam Link**, the installed version lives in `/mnt/scratch/sendspin` plus the startup
   script in `/mnt/config/overlay/etc/init.d/startup/S99steam`. The USB version only uses RAM
   (`/tmp/sendspin`) and the stick.

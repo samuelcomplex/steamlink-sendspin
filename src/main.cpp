@@ -9,8 +9,9 @@
 //
 // Usage: sendspin-steamlink [options]
 //   -n NAME   Player name shown in Music Assistant (default "Steam Link XXXX", from the MAC)
-//   -u URL    Dial this Sendspin server, e.g. ws://192.168.1.10:8927/sendspin. Without it, the
-//             player finds Music Assistant on the network itself (mDNS).
+//   -u URL    Dial this Sendspin server, e.g. ws://192.168.1.10:8927/sendspin. Without it, or
+//             when it hasn't answered for a minute, the player finds Music Assistant on the
+//             network itself (mDNS).
 //   -p PORT   Listen port for servers that connect to us (default 8928)
 //   -s FILE   State file (identity, pairing records / saved delay)
 //   -a        Allow playback without pairing            (encrypted build only)
@@ -338,26 +339,32 @@ int main(int argc, char* argv[]) {
     // receiver locked) before the first song starts.
     sink.configure(48000, 2, 16);
 
-    // Without a configured address, look for Music Assistant on the network: now, and again
-    // every 30 s while nothing is connected (it may start later, or move to another address).
-    const bool discover = url.empty();
+    // Finding Music Assistant. A configured address is dialed first and again every 15 s while
+    // disconnected. Without one, or once the configured address hasn't worked for a minute (Music
+    // Assistant moved, e.g. a new DHCP lease), the network is searched over mDNS every 30 s and
+    // whatever is found there is used instead.
+    const std::string configured = url;
     auto try_discover = [&] {
         if (auto found = sl::find_sendspin_server()) {
-            if (*found != url) fprintf(stderr, "sendspin: found Music Assistant at %s\n", found->c_str());
-            url = *found;
+            if (*found != url) {
+                fprintf(stderr, "sendspin: found Music Assistant at %s\n", found->c_str());
+                url = *found;
+            }
             client.connect_to(url);
             return true;
         }
         return false;
     };
-    if (discover) {
+    if (configured.empty()) {
         if (!try_discover()) fprintf(stderr, "sendspin: no Music Assistant found yet; still looking\n");
     } else {
         fprintf(stderr, "sendspin: dialing %s\n", url.c_str());
         client.connect_to(url);
     }
 
-    auto last_dial = std::chrono::steady_clock::now();
+    using clock = std::chrono::steady_clock;
+    auto last_dial = clock::now();
+    auto disconnected_since = clock::now();
     bool was_connected = false;
     int tick = 0;
     while (running.load()) {
@@ -367,15 +374,15 @@ int main(int argc, char* argv[]) {
         if (connected != was_connected) {
             fprintf(stderr, ">>> %s\n", connected ? "server connected" : "server disconnected");
             was_connected = connected;
+            if (!connected) disconnected_since = clock::now();
         }
-        // A dialed server that goes away (restart, update) is dialed again; a discovered one is
-        // looked up again first, in case it came back on another address.
         if (!connected) {
-            auto now = std::chrono::steady_clock::now();
-            if (discover && now - last_dial > std::chrono::seconds(30)) {
+            auto now = clock::now();
+            bool search = configured.empty() || now - disconnected_since > std::chrono::seconds(60);
+            if (search && now - last_dial > std::chrono::seconds(30)) {
                 if (!try_discover() && !url.empty()) client.connect_to(url);
-                last_dial = std::chrono::steady_clock::now();
-            } else if (!discover && now - last_dial > std::chrono::seconds(15)) {
+                last_dial = clock::now();
+            } else if (!search && now - last_dial > std::chrono::seconds(15)) {
                 client.connect_to(url);
                 last_dial = now;
             }
