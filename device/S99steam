@@ -1,0 +1,22 @@
+#!/bin/sh
+# Replaced by sendspin-steamlink (this copy lives in the /etc overlay on the config partition).
+#
+# The original Steam Link startup always runs: it loads the Marvell drivers and starts the
+# PE_Single_CPU media server that HDMI audio needs. While /mnt/scratch/sendspin/enabled exists,
+# the Sendspin supervisor then waits for the interface and takes over from it.
+#
+# Manual undo:  rm /mnt/config/overlay/etc/init.d/startup/S99steam && reboot
+
+SS=/mnt/scratch/sendspin
+ORIG=/mnt/config/sendspin/S99steam.orig
+
+if [ -f $ORIG ]; then
+    /bin/sh $ORIG
+else
+    /home/steam/rc.local
+fi
+
+if [ -f $SS/enabled ] && [ -x $SS/run.sh ] && [ -x $SS/sendspin-steamlink ]; then
+    $SS/run.sh boot </dev/null >/dev/null 2>&1 &
+fi
+exit 0

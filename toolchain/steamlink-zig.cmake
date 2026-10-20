@@ -1,0 +1,12 @@
+# Cross-compile for the original Steam Link (ARMv7 hard-float, glibc 2.19) with zig.
+set(CMAKE_SYSTEM_NAME Linux)
+set(CMAKE_SYSTEM_PROCESSOR arm)
+set(_tc ${CMAKE_CURRENT_LIST_DIR})
+set(CMAKE_C_COMPILER ${_tc}/zig-cc)
+set(CMAKE_CXX_COMPILER ${_tc}/zig-c++)
+set(CMAKE_AR ${_tc}/zig-ar CACHE FILEPATH "")
+set(CMAKE_RANLIB ${_tc}/zig-ranlib CACHE FILEPATH "")
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)

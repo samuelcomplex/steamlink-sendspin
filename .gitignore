@@ -1,0 +1,8 @@
+# build output
+/build/
+/deps/
+/dist/
+/app/payload.tar.gz
+# local Go workspace overrides
+/app/go.work
+/app/go.work.sum

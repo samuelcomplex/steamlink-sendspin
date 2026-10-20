@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steam Link speaker</title>
+<style>
+:root {
+  --bg: #e6e9ec;
+  --panel: #f5f7f8;
+  --ink: #1e2a35;
+  --muted: #5d6b77;
+  --line: #c9d0d6;
+  --action: #3c6680;
+  --action-ink: #ffffff;
+  --amber: #e2a03a;
+  --ok: #3f9a5c;
+  --err: #c2483d;
+  --console: #22303b;
+  --console-ink: #dbe4ea;
+  --display: "Bahnschrift", "DIN Alternate", "Barlow Semi Condensed", "Roboto Condensed", system-ui, sans-serif;
+  --text: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a2129; --panel: #222b34; --ink: #e3e9ee; --muted: #9aa7b2; --line: #364350;
+    --action: #6f9bb8; --action-ink: #10181f; --console: #12181e; --console-ink: #d3dde4;
+  }
+  .device .body { fill: #3b4855; }
+  .device .top { fill: #4b5a68; }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.5 var(--text);
+}
+main { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1rem 3rem; }
+
+/* The device: the one memorable thing. Its light shows what's happening. */
+header { display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2.25rem; }
+.device { flex: none; width: 112px; height: 72px; }
+.device .body { fill: #2b3640; }
+.device .top { fill: #3a4752; }
+.device .led { fill: #5f6c77; transition: fill .3s; }
+.device .glow { fill: transparent; transition: fill .3s; }
+body[data-state="working"] .device .led { fill: var(--amber); }
+body[data-state="working"] .device .glow { fill: color-mix(in srgb, var(--amber) 35%, transparent); }
+body[data-state="ok"] .device .led { fill: var(--ok); }
+body[data-state="ok"] .device .glow { fill: color-mix(in srgb, var(--ok) 35%, transparent); }
+body[data-state="error"] .device .led { fill: var(--err); }
+body[data-state="error"] .device .glow { fill: color-mix(in srgb, var(--err) 35%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  body[data-state="working"] .device .led { animation: blink 1.1s ease-in-out infinite; }
+}
+@keyframes blink { 50% { opacity: .35; } }
+
+h1 {
+  font: 600 2.1rem/1.1 var(--display); letter-spacing: -0.01em; margin: 0 0 .35rem;
+  font-stretch: semi-condensed;
+}
+header p { margin: 0; color: var(--muted); max-width: 32rem; }
+
+section {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 1.25rem 1.25rem 1.4rem; margin-bottom: 1rem;
+}
+h2 {
+  font: 600 1.2rem/1.25 var(--display); margin: 0 0 .9rem; display: flex; gap: .65rem;
+  align-items: baseline;
+}
+h2 .n {
+  font-variant-numeric: tabular-nums; color: var(--action); min-width: 1ch;
+}
+.hint { color: var(--muted); font-size: .92rem; margin: .5rem 0 0; }
+
+label { display: block; font-weight: 600; font-size: .95rem; margin: .9rem 0 .3rem; }
+input[type=text], input[type=password], select {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: .55rem .7rem;
+}
+.row { display: flex; gap: .6rem; align-items: stretch; }
+.row > input, .row > select { flex: 1; min-width: 0; }
+
+button {
+  font: 600 .95rem/1 var(--text); border-radius: 6px; padding: .65rem 1rem; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+button.primary { background: var(--action); border-color: var(--action); color: var(--action-ink); }
+button.big { font-size: 1.05rem; padding: .85rem 1.4rem; }
+button.danger { color: var(--err); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--action) 55%, transparent); outline-offset: 2px; }
+
+.devices { list-style: none; padding: 0; margin: .9rem 0 0; display: grid; gap: .4rem; }
+.devices button {
+  width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 1rem;
+  font-weight: 400; background: var(--bg);
+}
+.devices button[aria-pressed="true"] { border-color: var(--action); box-shadow: inset 0 0 0 1px var(--action); }
+.devices .ip { font-variant-numeric: tabular-nums; color: var(--muted); }
+.tag { font-size: .82rem; color: var(--action); white-space: nowrap; }
+
+details { margin-top: .8rem; font-size: .95rem; }
+summary { cursor: pointer; color: var(--action); font-weight: 600; }
+details ol { margin: .5rem 0 0; padding-left: 1.3rem; color: var(--ink); }
+code { font: .88em var(--mono); background: var(--bg); padding: .05em .3em; border-radius: 3px; }
+
+.install { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin: 1.25rem 0 1rem; }
+.status { color: var(--muted); }
+body[data-state="ok"] .status { color: var(--ok); }
+body[data-state="error"] .status { color: var(--err); }
+
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+pre {
+  background: var(--console); color: var(--console-ink); border-radius: 8px; margin: 1rem 0 0;
+  padding: .9rem 1rem; font: .82rem/1.45 var(--mono); max-height: 22rem; overflow: auto;
+  white-space: pre-wrap; word-break: break-word;
+}
+pre:empty::before { content: "Output from the Steam Link appears here."; opacity: .6; }
+footer { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: .85rem; margin-top: 1.5rem; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+@media (max-width: 34rem) {
+  header { flex-direction: column; align-items: flex-start; gap: 1rem; }
+  .row { flex-direction: column; }
+}
+</style>
+</head>
+<body data-state="idle">
+<main>
+  <header>
+    <svg class="device" viewBox="0 0 112 72" aria-hidden="true">
+      <ellipse class="glow" cx="94" cy="49" rx="12" ry="7"/>
+      <path class="body" d="M10 22 L102 22 Q108 22 108 28 L108 54 Q108 62 100 62 L12 62 Q4 62 4 54 L4 28 Q4 22 10 22 Z"/>
+      <path class="top" d="M14 12 L98 12 Q104 12 106 18 L108 26 L4 26 L6 18 Q8 12 14 12 Z"/>
+      <rect class="led" x="88" y="46" width="12" height="4" rx="2"/>
+    </svg>
+    <div>
+      <h1>Steam Link speaker</h1>
+      <p>Plays music from Music Assistant through your Steam Link's HDMI, to the TV or receiver it's plugged into.</p>
+    </div>
+  </header>
+
+  <section aria-labelledby="s1">
+    <h2 id="s1"><span class="n">1</span> Find your Steam Link</h2>
+    <div class="row">
+      <input type="text" id="host" placeholder="Steam Link address, e.g. 192.168.1.133" autocomplete="off" aria-label="Steam Link address">
+      <button id="scan">Search the network</button>
+    </div>
+    <ul class="devices" id="devices" aria-live="polite"></ul>
+    <p class="hint" id="scanHint" hidden></p>
+    <details>
+      <summary>Not found? Turn on SSH first</summary>
+      <ol>
+        <li>On a USB stick (FAT32), create the folders <code>steamlink\config\system</code>.</li>
+        <li>In that folder, create an empty file named <code>enable_ssh.txt</code>.</li>
+        <li>Plug the stick into the Steam Link and unplug its power for a moment to restart it.</li>
+        <li>Search again. Devices named <code>steamlink-…</code> are listed first.</li>
+      </ol>
+    </details>
+  </section>
+
+  <section aria-labelledby="s2">
+    <h2 id="s2"><span class="n">2</span> Sign in</h2>
+    <label for="password">Steam Link password</label>
+    <input type="password" id="password" value="steamlink123" autocomplete="off">
+    <p class="hint">The Steam Link's SSH password. It's <code>steamlink123</code> unless you changed it.</p>
+  </section>
+
+  <section aria-labelledby="s3">
+    <h2 id="s3"><span class="n">3</span> Choose how it plays</h2>
+    <label for="name">Name in Music Assistant</label>
+    <input type="text" id="name" value="Steam Link" maxlength="60">
+    <label for="server">Music Assistant</label>
+    <div class="row">
+      <select id="serverPick" aria-label="Music Assistant servers found"><option value="">Searching…</option></select>
+      <input type="text" id="server" placeholder="Address, e.g. 192.168.1.6" autocomplete="off" aria-label="Music Assistant address">
+    </div>
+    <p class="hint">The Steam Link connects to this address and reconnects if Music Assistant restarts.</p>
+  </section>
+
+  <div class="install">
+    <button class="primary big" id="install">Install on Steam Link</button>
+    <span class="status" id="status" role="status">Ready.</span>
+  </div>
+
+  <section aria-labelledby="s4">
+    <h2 id="s4">Manage</h2>
+    <div class="actions">
+      <button data-action="status">Check status</button>
+      <button data-action="log">Show player log</button>
+      <button data-action="restart">Restart player</button>
+      <button data-action="ui">Use as Steam Link again</button>
+      <button data-action="speaker">Use as speaker again</button>
+      <button data-action="uninstall" class="danger">Remove from Steam Link</button>
+    </div>
+    <p class="hint">"Use as Steam Link again" keeps the player installed but boots the normal Steam Link interface. "Remove" restores the original startup completely. Both restart the Steam Link.</p>
+    <pre id="out" aria-live="polite" aria-label="Output"></pre>
+  </section>
+
+  <footer>
+    <span id="build"></span>
+    <button id="quit">Quit</button>
+  </footer>
+</main>
+<script>
+const token = new URLSearchParams(location.search).get("t");
+const $ = (id) => document.getElementById(id);
+const api = (path, opts = {}) =>
+  fetch(path, { ...opts, headers: { "X-Token": token, "Content-Type": "application/json", ...(opts.headers || {}) } });
+
+const store = {
+  get(k) { try { return localStorage.getItem("ss." + k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem("ss." + k, v); } catch {} },
+};
+for (const k of ["host", "name", "server"]) {
+  const v = store.get(k);
+  if (v) $(k).value = v;
+  $(k).addEventListener("change", () => store.set(k, $(k).value.trim()));
+}
+
+let busy = false;
+function setState(state, text) {
+  document.body.dataset.state = state;
+  if (text) $("status").textContent = text;
+}
+function setBusy(b) {
+  busy = b;
+  document.querySelectorAll("button:not(#quit)").forEach((el) => (el.disabled = b));
+}
+
+// Step 1: search
+async function scan() {
+  setBusy(true);
+  $("scanHint").hidden = false;
+  $("scanHint").textContent = "Searching this network for devices with SSH turned on…";
+  $("devices").innerHTML = "";
+  try {
+    const list = await (await api("/api/devices")).json();
+    if (!list.length) {
+      $("scanHint").textContent = "Nothing found with SSH turned on. Check that the Steam Link is on, or turn on SSH (below).";
+    } else {
+      $("scanHint").textContent = list.some((d) => d.steamLink)
+        ? "Pick your Steam Link."
+        : "No device is named like a Steam Link. If you know its address, pick it or type it above.";
+      for (const d of list) {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.setAttribute("aria-pressed", String($("host").value === d.ip));
+        const left = document.createElement("span");
+        left.textContent = d.name || "Unnamed device";
+        const right = document.createElement("span");
+        right.className = "tag";
+        right.textContent = d.installed ? "Speaker installed" : d.steamLink ? "Steam Link" : "";
+        const ip = document.createElement("span");
+        ip.className = "ip";
+        ip.textContent = " " + d.ip;
+        left.append(ip);
+        b.append(left, right);
+        b.onclick = () => {
+          $("host").value = d.ip;
+          store.set("host", d.ip);
+          document.querySelectorAll(".devices button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+        };
+        li.append(b);
+        $("devices").append(li);
+      }
+    }
+  } catch {
+    $("scanHint").textContent = "The search didn't finish. Try again, or type the address.";
+  }
+  setBusy(false);
+}
+
+// Step 3: Music Assistant
+async function findServers() {
+  const pick = $("serverPick");
+  try {
+    const list = await (await api("/api/servers")).json();
+    pick.innerHTML = "";
+    if (!list.length) {
+      pick.append(new Option("None found: type the address", ""));
+    } else {
+      for (const s of list) pick.append(new Option(`${s.name} (${s.url.replace(/^ws:\/\//, "").replace(/\/.*$/, "")})`, s.url));
+      pick.append(new Option("Other: type the address", ""));
+      if (!$("server").value) $("server").value = list[0].url;
+      pick.value = $("server").value;
+    }
+  } catch {
+    pick.innerHTML = "";
+    pick.append(new Option("Search failed: type the address", ""));
+  }
+}
+$("serverPick").onchange = () => {
+  $("server").value = $("serverPick").value;
+  store.set("server", $("server").value);
+  if (!$("serverPick").value) $("server").focus();
+};
+
+// Running things on the Steam Link
+const labels = {
+  install: ["Installing…", "Installed. It should appear in Music Assistant shortly."],
+  status: ["Checking…", "Status shown below."],
+  log: ["Reading the log…", "Log shown below."],
+  trace: ["Reading the trace…", "Trace shown below."],
+  restart: ["Restarting the player…", "Player restarted."],
+  ui: ["Switching to the Steam Link interface…", "The Steam Link is restarting into its normal interface."],
+  speaker: ["Switching to speaker mode…", "The Steam Link is restarting as a speaker."],
+  uninstall: ["Removing…", "Removed. The Steam Link is restarting into its normal interface."],
+};
+async function run(action) {
+  const host = $("host").value.trim();
+  if (!host) {
+    setState("error", "Enter or pick the Steam Link's address first.");
+    $("host").focus();
+    return;
+  }
+  if (action === "uninstall" && !confirm("Remove the speaker from this Steam Link and restore its original startup?")) return;
+  const [doing, done] = labels[action];
+  setBusy(true);
+  setState("working", doing);
+  const out = $("out");
+  out.textContent = "";
+  let text = "";
+  try {
+    const res = await api("/api/run", {
+      method: "POST",
+      body: JSON.stringify({
+        action, host, password: $("password").value,
+        name: $("name").value.trim() || "Steam Link", server: $("server").value.trim(),
+      }),
+    });
+    if (!res.ok) throw new Error((await res.text()).trim());
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    for (;;) {
+      const { value, done: end } = await reader.read();
+      if (end) break;
+      text += dec.decode(value, { stream: true });
+      const shown = text.split("\x1e")[0];
+      out.textContent = shown.replace(/^\n+/, "");
+      out.scrollTop = out.scrollHeight;
+    }
+    const result = (text.split("\x1e")[1] || "").trim();
+    if (result === "OK") setState("ok", done);
+    else setState("error", result.replace(/^ERROR\s*/, "") || "The connection ended unexpectedly.");
+  } catch (e) {
+    setState("error", e.message || "Something went wrong.");
+  }
+  setBusy(false);
+}
+$("install").onclick = () => run("install");
+document.querySelectorAll("[data-action]").forEach((b) => (b.onclick = () => run(b.dataset.action)));
+$("scan").onclick = scan;
+$("quit").onclick = async () => {
+  await api("/api/quit", { method: "POST" }).catch(() => {});
+  document.body.innerHTML = "<main><h1>Closed</h1><p>You can close this tab.</p></main>";
+};
+
+setInterval(() => api("/api/ping", { method: "POST" }).catch(() => {}), 10000);
+api("/api/info").then((r) => r.json()).then((i) => ($("build").textContent = "Steam Link speaker, " + i.build)).catch(() => {});
+findServers();
+if (!$("host").value) scan();
+</script>
+</body>
+</html>
