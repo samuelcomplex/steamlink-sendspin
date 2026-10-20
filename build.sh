@@ -46,6 +46,30 @@ tar czf - -C "$STAGE" . | base64 -w 76 >> "$OUT"
 chmod +x "$OUT"
 echo "packed $OUT ($(du -h "$OUT" | cut -f1))"
 
+# The USB version: unzip onto a FAT32 stick. The Steam Link runs steamlink/factory_test/run.sh
+# from the stick at boot; nothing is installed on it.
+python3 - "$BUILD/sendspin-steamlink" dist/steamlink-speaker-usb.zip <<'PYEOF'
+import sys, zipfile
+player, out = sys.argv[1], sys.argv[2]
+files = {
+    "READ ME.txt": "device/usb/READ ME.txt",
+    "steamlink/factory_test/run.sh": "device/usb/factory_test/run.sh",
+    "steamlink/speaker/supervisor.sh": "device/run.sh",
+    "steamlink/speaker/settings.txt": "device/usb/speaker/settings.txt",
+    "steamlink/speaker/sendspin-steamlink": player,
+}
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    for name, src in files.items():
+        data = open(src, "rb").read()
+        if name.endswith(".txt"):
+            data = data.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")  # Notepad-friendly
+        info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
+        info.external_attr = (0o755 if not name.endswith(".txt") else 0o644) << 16
+        info.compress_type = zipfile.ZIP_DEFLATED
+        z.writestr(info, data)
+print(f"packed {out}")
+PYEOF
+
 # The GUI app (Windows .exe and Linux binaries), with the same payload embedded.
 if command -v go >/dev/null && [ "${SKIP_APPS:-0}" != 1 ]; then
     # Resolve the Go libraries (a local app/go.work, if present, overrides where they come from).

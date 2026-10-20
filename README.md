@@ -4,17 +4,41 @@ Turn an original Valve Steam Link into a [Music Assistant](https://music-assista
 It plays synchronized audio over HDMI to whatever the Steam Link is plugged into: a TV, a
 soundbar or an AV receiver.
 
-The Steam Link keeps its stock firmware. Nothing is flashed: the installer adds a small
-[Sendspin](https://www.sendspin-audio.com/) player and one startup file, and can remove both
-again.
+The Steam Link keeps its stock firmware. Nothing is flashed. There are two ways to use it:
 
-![The installer app, with two Steam Links found on the network](docs/app.png)
+- **[USB stick](#usb-stick-no-installation):** the speaker runs from a USB stick for as long as
+  the stick is plugged in. No installation, no settings, no computer setup.
+- **[Installed](#install):** an installer puts a small [Sendspin](https://www.sendspin-audio.com/)
+  player and one startup file on the Steam Link, so it works without a stick. It can remove both
+  again.
 
-## What you need
+Both need an original Valve Steam Link (the small black box, model 1001) on the stock firmware,
+and Music Assistant **2.10.x** with its Sendspin provider and "Allow legacy clients" on (the
+default); see [Music Assistant versions](#music-assistant-versions).
 
-- An original Valve Steam Link (the small black box, model 1001) on the stock firmware.
-- Music Assistant **2.10.x** with its Sendspin provider. Keep "Allow legacy clients" on (the
-  default); see [Music Assistant versions](#music-assistant-versions).
+## USB stick (no installation)
+
+1. Download `steamlink-speaker-usb.zip` from the [latest release](../../releases/latest).
+2. Unzip it onto a FAT32 USB stick, so the stick has a `steamlink` folder at the top.
+3. Plug the stick into the Steam Link and restart it (unplug its power for a moment).
+
+The Steam Link starts as usual and shows its menu for about a minute; then the speaker takes over
+and appears in Music Assistant as "Steam Link" plus four characters from its network address. It
+finds Music Assistant on its own.
+
+**To go back to normal, pull out the stick.** The Steam Link menu returns within a few seconds,
+and nothing on the Steam Link has changed.
+
+Optional: `steamlink\speaker\settings.txt` on the stick sets the name, Music Assistant's address
+and sync tuning; edit it with any text editor and restart the Steam Link. The speaker writes its
+log to `steamlink\speaker\log.txt` on the stick.
+
+How it works: at startup the Steam Link runs `steamlink/factory_test/run.sh` from a plugged-in
+stick, a hook meant for factory testing. That script copies the speaker into RAM and starts it,
+and the speaker stops and hands the Steam Link back to its menu when the stick disappears.
+
+## What you need (installed version)
+
 - SSH turned on for the Steam Link:
   1. On a FAT32 USB stick, create the folders `steamlink\config\system`.
   2. In that folder, create an empty file named `enable_ssh.txt`.
@@ -35,7 +59,8 @@ Run `SteamLinkSpeaker.exe`. A page opens in your browser:
    by their Valve network hardware.
 2. **Sign in** with the Steam Link's SSH password.
 3. **Choose how it plays**: the name to show in Music Assistant, and Music Assistant's address.
-   It's filled in automatically when Music Assistant is found on the network.
+   It's filled in automatically when Music Assistant is found on the network; if it's left
+   empty, the speaker looks for Music Assistant itself.
 
 Then select **Install on Steam Link**. The player appears in Music Assistant within a few seconds.
 
@@ -89,7 +114,7 @@ Install again at any time to upgrade; your settings are kept.
 **No sound.** Check the player log. A healthy boot looks like this:
 
 ```
-supervisor version 9 starting (boot)
+supervisor version 10 starting (boot)
 media server up after 0s
 Steam Link interface up after 2s; letting it finish starting
 stopped the Steam Link interface
@@ -140,8 +165,12 @@ encrypted handshake with the newer server library but hasn't been tested end to 
 - **Rejoining:** the player always says goodbye with the reason `restart`, never `shutdown`. Music
   Assistant then keeps it in its group for a few minutes and puts it straight back into a running
   stream when it reconnects; after `shutdown` it would forget the group.
-- **On the Steam Link**, everything lives in `/mnt/scratch/sendspin` plus the startup script in
-  `/mnt/config/overlay/etc/init.d/startup/S99steam`.
+- **Finding Music Assistant:** without a configured address, the player asks the network over
+  mDNS for `_sendspin-server._tcp`, which Music Assistant announces, and asks again whenever it's
+  disconnected.
+- **On the Steam Link**, the installed version lives in `/mnt/scratch/sendspin` plus the startup
+  script in `/mnt/config/overlay/etc/init.d/startup/S99steam`. The USB version only uses RAM
+  (`/tmp/sendspin`) and the stick.
 - **The installers** (`app/`, `host/`) carry the player inside them, send it over SSH and run
   `device/ctl.sh` on the Steam Link.
 

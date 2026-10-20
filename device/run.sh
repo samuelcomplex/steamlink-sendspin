@@ -1,21 +1,44 @@
 #!/bin/sh
-# version 9 (2026-10-21): after a TV/receiver off-on, HDMI is set up again and the player rejoins
+# version 10 (2026-10-21): also runs from a USB stick ("usb" mode); finds Music Assistant itself
 #
 # sendspin-steamlink supervisor: runs the player, restarts it if it exits, and keeps the
 # Steam Link interface from taking the audio device back.
 #
-# Started at boot by /etc/init.d/startup/S99steam ("run.sh boot") after the original Steam Link
-# startup (rc.local) has loaded the Marvell drivers and started the PE_Single_CPU media server,
-# which the SDL "marvell" audio driver needs. Without "boot" it takes over immediately.
+# Installed version: started at boot by /etc/init.d/startup/S99steam ("run.sh boot") after the
+# original Steam Link startup (rc.local) has loaded the Marvell drivers and started the
+# PE_Single_CPU media server, which the SDL "marvell" audio driver needs. Without "boot" it takes
+# over immediately.
+#
+# USB version: started early in boot by the stick's steamlink/factory_test/run.sh ("run.sh usb"),
+# from a copy in RAM. It waits for the media server like the installed version, keeps its log and
+# settings on the stick, and stops (handing the Steam Link back to its interface) as soon as the
+# stick is pulled out. Nothing is written to the Steam Link itself.
 
-SS=/mnt/scratch/sendspin
-LOG=$SS/log.txt
-TRACE=$SS/trace.txt
+MODE=installed
+[ "$1" = usb ] && MODE=usb
 PIDFILE=/var/run/sendspin-run.pid
 PAUSED=/var/run/sendspin-paused   # processes we paused, so they can be resumed
 PELOG=/mnt/scratch/log/PE_server.log
 
+if [ $MODE = usb ]; then
+    SS=/tmp/sendspin                       # the player and this script, in RAM
+    USBDEV=$(cat $SS/usb-device 2>/dev/null)
+    USBSYS=${SENDSPIN_USB_SYS:-/sys/class/block/${USBDEV##*/}}
+    USBMNT=/mnt/sendspin-usb
+    DATA=$SS                               # log and state; moved to the stick once it's mounted
+else
+    SS=/mnt/scratch/sendspin
+    DATA=$SS
+fi
+LOG=$DATA/log.txt
+TRACE=$SS/trace.txt
+
 sslog() { echo "=== $(date) $*" >> $LOG; }
+
+# Still meant to be running: installed and enabled, or the USB stick still plugged in.
+active() {
+    if [ $MODE = usb ]; then [ -n "$USBDEV" ] && [ -e "$USBSYS" ]; else [ -f $SS/enabled ]; fi
+}
 
 # Step-by-step trace of this script (kept small), for diagnosing startup problems.
 [ -f $TRACE ] && [ "$(wc -c < $TRACE)" -gt 200000 ] && mv -f $TRACE $TRACE.1
@@ -30,14 +53,38 @@ if [ -f $PIDFILE ] && kill -0 "$(cat $PIDFILE)" 2>/dev/null; then
 fi
 echo $$ > $PIDFILE
 
-NAME="Steam Link"
+if [ $MODE = usb ]; then
+    sslog "supervisor version 10 starting (USB stick $USBDEV)"
+    if [ -f /mnt/scratch/sendspin/enabled ]; then
+        sslog "this Steam Link has the installed version; the USB stick isn't needed. Stopping."
+        rm -f $PIDFILE
+        exit 0
+    fi
+    # The Steam Link's own startup reads the stick at /mnt/disk and unmounts it when it's done;
+    # then mount it ourselves for the log and settings.
+    i=0
+    while [ $i -lt 60 ] && grep -q ' /mnt/disk ' /proc/mounts; do sleep 1; i=$((i + 1)); done
+    mkdir -p $USBMNT
+    if mount "$USBDEV" $USBMNT 2>>$TRACE && [ -d $USBMNT/steamlink/speaker ]; then
+        cat $LOG >> $USBMNT/steamlink/speaker/log.txt 2>/dev/null
+        DATA=$USBMNT/steamlink/speaker
+        LOG=$DATA/log.txt
+        [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt 500000 ] && mv -f $LOG $DATA/log-old.txt
+        [ -f $DATA/settings.txt ] && tr -d '\r' < $DATA/settings.txt > $SS/sendspin.conf
+        sslog "log and settings on the USB stick"
+    else
+        sslog "couldn't mount the USB stick for the log; keeping it in RAM"
+    fi
+else
+    sslog "supervisor version 10 starting ($*)"
+fi
+
+NAME=""
 SERVER_URL=""
 DELAY_MS=0
 LATENCY_MS=0
 EXTRA_ARGS=""
 [ -f $SS/sendspin.conf ] && . $SS/sendspin.conf
-
-sslog "supervisor version 9 starting ($*)"
 
 # Live (not zombie) Steam Link interface processes. A killed interface whose parent is paused
 # stays behind as a zombie, and BusyBox pidof still lists it.
@@ -93,6 +140,17 @@ hpd_state() {
     grep 'HPD=' $PELOG 2>/dev/null | tail -1 | sed -n 's/.*HPD=\([01]\).*/\1/p'
 }
 
+# USB version, stick removed: resume the Steam Link interface and its power manager, and let go
+# of the stick. Safe to run more than once.
+hand_back() {
+    [ -f $PAUSED ] || return 0
+    echo "=== $(date) USB stick removed; handing the Steam Link back to its interface" \
+        >> $SS/log.txt
+    for pid in $(cat $PAUSED 2>/dev/null); do kill -CONT "$pid" 2>/dev/null; done
+    rm -f $PAUSED
+    umount -l $USBMNT 2>/dev/null
+}
+
 # Brings HDMI back the way it comes up at boot: lets the Steam Link interface start, gives it a
 # few seconds, then stops it again and restarts the player. The player says goodbye as
 # "restart", so Music Assistant keeps it in its group and puts it back into the running stream.
@@ -113,10 +171,11 @@ wake_hdmi() {
     killall sendspin-steamlink 2>/dev/null
 }
 
-if [ "$1" = boot ]; then
-    # Wait for the media server, then for the interface (its start brings up HDMI).
+if [ "$1" = boot ] || [ $MODE = usb ]; then
+    # Wait for the media server, then for the interface (its start brings up HDMI). From USB we
+    # start much earlier in boot, before the Steam Link's own startup has run at all.
     i=0
-    while [ $i -lt 60 ] && ! pidof PE_Single_CPU >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
+    while [ $i -lt 180 ] && ! pidof PE_Single_CPU >/dev/null 2>&1; do sleep 1; i=$((i + 1)); done
     sslog "media server $(pidof PE_Single_CPU >/dev/null 2>&1 && echo up || echo 'NOT running') after ${i}s"
     i=0
     while [ $i -lt 90 ] && [ -z "$(ui_pids)" ]; do sleep 1; i=$((i + 1)); done
@@ -135,7 +194,7 @@ stop_ui "stopped the Steam Link interface"
 (
     set +x
     seen=$(hpd_count)
-    while [ -f $SS/enabled ]; do
+    while active; do
         now=$(hpd_count)
         if [ "$now" -gt "$seen" ] 2>/dev/null; then
             # Receivers often drop and restore the link several times while they power up and
@@ -160,24 +219,36 @@ stop_ui "stopped the Steam Link interface"
         fi
         sleep 3
     done
+    if [ $MODE = usb ]; then
+        # The stick was pulled out: give the Steam Link back to its interface first, then stop
+        # the player (which ends the main loop).
+        hand_back
+        killall sendspin-steamlink 2>/dev/null
+    fi
 ) &
 WATCHER=$!
 # Signal numbers, not names: the Steam Link's old BusyBox ash rejects "TERM" ("bad trap")
 # and a failed trap ends the script.
 trap 'kill $WATCHER 2>/dev/null; rm -f $PIDFILE; exit 0' 15 2
 
-while [ -f $SS/enabled ]; do
+while active; do
     if [ -f $LOG ] && [ "$(wc -c < $LOG)" -gt 1000000 ]; then
         mv -f $LOG $LOG.1
     fi
     sslog "starting sendspin-steamlink"
-    URL_ARG=""
-    [ -n "$SERVER_URL" ] && URL_ARG="-u $SERVER_URL"
+    # Without a name the player calls itself "Steam Link XXXX" (end of its MAC address); without
+    # an address it finds Music Assistant on the network itself.
+    set --
+    [ -n "$NAME" ] && set -- -n "$NAME"
+    [ -n "$SERVER_URL" ] && set -- "$@" -u "$SERVER_URL"
     # shellcheck disable=SC2086
-    $SS/sendspin-steamlink -n "$NAME" $URL_ARG -s $SS/state -d "$DELAY_MS" -L "$LATENCY_MS" \
-        $EXTRA_ARGS >> $LOG 2>&1
-    sslog "player exited with code $?, restarting"
+    $SS/sendspin-steamlink "$@" -s $DATA/state -d "$DELAY_MS" -L "$LATENCY_MS" $EXTRA_ARGS \
+        >> $LOG 2>&1
+    rc=$?
+    active || break
+    sslog "player exited with code $rc, restarting"
     sleep 2
 done
+[ $MODE = usb ] && hand_back
 kill $WATCHER 2>/dev/null
 rm -f $PIDFILE

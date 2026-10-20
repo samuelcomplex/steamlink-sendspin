@@ -8,8 +8,9 @@
 //   (default)            sendspin-cpp >= 0.9, encrypted Sendspin 1.0, for newer servers
 //
 // Usage: sendspin-steamlink [options]
-//   -n NAME   Player name shown in Music Assistant (default "Steam Link")
-//   -u URL    Also dial this Sendspin server, e.g. ws://192.168.1.10:8927/sendspin
+//   -n NAME   Player name shown in Music Assistant (default "Steam Link XXXX", from the MAC)
+//   -u URL    Dial this Sendspin server, e.g. ws://192.168.1.10:8927/sendspin. Without it, the
+//             player finds Music Assistant on the network itself (mDNS).
 //   -p PORT   Listen port for servers that connect to us (default 8928)
 //   -s FILE   State file (identity, pairing records / saved delay)
 //   -a        Allow playback without pairing            (encrypted build only)
@@ -22,6 +23,7 @@
 //
 // Licensed under the Apache License, Version 2.0.
 
+#include "discovery.h"
 #include "sdl2_api.h"
 #include "sdl_sink.h"
 #include "sendspin/client.h"
@@ -132,7 +134,7 @@ int main(int argc, char* argv[]) {
     std::signal(SIGTERM, on_signal);
     std::signal(SIGPIPE, SIG_IGN);
 
-    std::string name = "Steam Link";
+    std::string name;
     std::string url;
     std::string state_file = "./sendspin-state.json";
     std::string token_file;
@@ -163,6 +165,17 @@ int main(int argc, char* argv[]) {
         }
     }
     SendspinClient::set_log_level(level);
+    // Accept a bare address ("192.168.1.6", "192.168.1.6:8927") as well as a full URL.
+    if (!url.empty() && url.find("://") == std::string::npos) {
+        std::string host = url;
+        if (host.find(':') == std::string::npos) host += ":8927";
+        if (host.find('/') == std::string::npos) host += "/sendspin";
+        url = "ws://" + host;
+    }
+    if (name.empty()) {
+        std::string suffix = sl::mac_suffix();
+        name = suffix.empty() ? "Steam Link" : "Steam Link " + suffix;
+    }
 #ifdef SENDSPIN_LEGACY_API
     (void)unpaired;
     fprintf(stderr, "sendspin-steamlink: legacy protocol build (Music Assistant 2.10.x), built %s\n",
@@ -325,7 +338,21 @@ int main(int argc, char* argv[]) {
     // receiver locked) before the first song starts.
     sink.configure(48000, 2, 16);
 
-    if (!url.empty()) {
+    // Without a configured address, look for Music Assistant on the network: now, and again
+    // every 30 s while nothing is connected (it may start later, or move to another address).
+    const bool discover = url.empty();
+    auto try_discover = [&] {
+        if (auto found = sl::find_sendspin_server()) {
+            if (*found != url) fprintf(stderr, "sendspin: found Music Assistant at %s\n", found->c_str());
+            url = *found;
+            client.connect_to(url);
+            return true;
+        }
+        return false;
+    };
+    if (discover) {
+        if (!try_discover()) fprintf(stderr, "sendspin: no Music Assistant found yet; still looking\n");
+    } else {
         fprintf(stderr, "sendspin: dialing %s\n", url.c_str());
         client.connect_to(url);
     }
@@ -341,10 +368,14 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, ">>> %s\n", connected ? "server connected" : "server disconnected");
             was_connected = connected;
         }
-        // A dialed server that goes away (restart, update) is dialed again.
-        if (!url.empty() && !connected) {
+        // A dialed server that goes away (restart, update) is dialed again; a discovered one is
+        // looked up again first, in case it came back on another address.
+        if (!connected) {
             auto now = std::chrono::steady_clock::now();
-            if (now - last_dial > std::chrono::seconds(15)) {
+            if (discover && now - last_dial > std::chrono::seconds(30)) {
+                if (!try_discover() && !url.empty()) client.connect_to(url);
+                last_dial = std::chrono::steady_clock::now();
+            } else if (!discover && now - last_dial > std::chrono::seconds(15)) {
                 client.connect_to(url);
                 last_dial = now;
             }

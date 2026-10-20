@@ -2,6 +2,9 @@ Turn an original Valve Steam Link into a Music Assistant speaker that plays over
 
 **Which file do I need?**
 
+- **No installation:** `steamlink-speaker-usb.zip`. Unzip it onto a USB stick, plug it into the
+  Steam Link and restart it. The speaker runs while the stick is in; pull it out to go back to
+  normal.
 - **Windows:** `SteamLinkSpeaker.exe`. Run it and follow the steps in the page that opens.
 - **Linux:** `steamlink-sendspin.sh`. Run `bash steamlink-sendspin.sh` and answer the questions.
   Or use `steamlink-speaker-linux-x64` / `steamlink-speaker-linux-arm64`, the same browser app as

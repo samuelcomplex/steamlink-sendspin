@@ -1,0 +1,26 @@
+Steam Link Speaker - USB version
+================================
+
+Turns an original Valve Steam Link into a Music Assistant speaker for as long as this USB
+stick is plugged in. Nothing is installed on the Steam Link.
+
+Setting up
+1. Copy everything from the download onto a USB stick (FAT32), so the stick has a
+   "steamlink" folder at the top.
+2. Plug the stick into the Steam Link and restart the Steam Link (unplug its power for a
+   moment).
+3. The Steam Link starts as usual and shows its menu for about a minute; then the speaker
+   takes over. It appears in Music Assistant as "Steam Link XXXX".
+
+Going back to normal
+Pull out the stick. The Steam Link menu comes back within a few seconds.
+
+Settings
+Optional: open steamlink\speaker\settings.txt in any text editor to choose a name or set
+Music Assistant's address. Restart the Steam Link afterwards.
+
+Something not working?
+The speaker writes a log to steamlink\speaker\log.txt on this stick. Plug the stick into a
+computer to read it. More help: https://github.com/samuelcomplex/steamlink-sendspin
+
+Needs Music Assistant 2.10.x with "Allow legacy clients" on (the default).

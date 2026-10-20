@@ -21,7 +21,7 @@ set(SENDSPIN_USE_CCACHE OFF CACHE BOOL "" FORCE)
 set(SENDSPIN_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sendspin-cpp" CACHE PATH "sendspin-cpp checkout")
 add_subdirectory(${SENDSPIN_CPP_DIR} sendspin-cpp)
 
-set(APP_SOURCES src/main.cpp src/sdl_sink.cpp src/sdl2_api.cpp)
+set(APP_SOURCES src/main.cpp src/sdl_sink.cpp src/sdl2_api.cpp src/discovery.cpp)
 if(NOT SENDSPIN_LEGACY_API)
     list(APPEND APP_SOURCES ${SENDSPIN_CPP_DIR}/examples/common/file_persistence_provider.cpp)
 endif()

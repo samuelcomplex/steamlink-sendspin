@@ -1,0 +1,14 @@
+# Steam Link Speaker settings. Everything here is optional: with nothing set, the speaker
+# finds Music Assistant on your network by itself and calls itself "Steam Link XXXX".
+# Lines starting with # are ignored. Edit with any text editor, then restart the Steam Link.
+
+# Name shown in Music Assistant, for example: NAME="Living Room"
+NAME=""
+
+# Music Assistant's address, only if it isn't found automatically, for example:
+# SERVER_URL="192.168.1.6"
+SERVER_URL=""
+
+# If this speaker plays LATE compared to your other speakers, raise this (milliseconds, e.g. 50).
+LATENCY_MS=0
+DELAY_MS=0
