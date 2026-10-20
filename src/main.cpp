@@ -55,6 +55,13 @@ using namespace sendspin;
 static std::atomic<bool> running{true};
 static void on_signal(int) { running.store(false); }
 
+// The supervisor asks the player to let go of the audio device (SIGUSR2) while the Steam Link
+// interface sets HDMI up again after a TV or receiver was switched off and on, and to reopen it
+// afterwards (SIGUSR1). The connection to the server stays up throughout.
+static std::atomic<bool> release_audio{false};
+static std::atomic<bool> reopen_audio{false};
+static void on_usr(int sig) { (sig == SIGUSR2 ? release_audio : reopen_audio).store(true); }
+
 static bool parse_level(const char* s, LogLevel& out) {
     struct { const char* n; LogLevel l; } t[] = {
         {"none", LogLevel::NONE}, {"error", LogLevel::ERROR}, {"warn", LogLevel::WARN},
@@ -111,6 +118,18 @@ struct LegacyPersistence : SendspinPersistenceProvider {
         if (f >> v && v < 65536) return static_cast<uint16_t>(v);
         return std::nullopt;
     }
+    // Which server last played here, so a reconnecting server is recognized after a restart.
+    bool save_last_server_hash(uint32_t hash) override {
+        std::ofstream f(path + ".server");
+        f << hash << "\n";
+        return static_cast<bool>(f);
+    }
+    std::optional<uint32_t> load_last_server_hash() override {
+        std::ifstream f(path + ".server");
+        unsigned long v;
+        if (f >> v && v <= 0xffffffffUL) return static_cast<uint32_t>(v);
+        return std::nullopt;
+    }
 };
 #endif
 
@@ -118,6 +137,8 @@ int main(int argc, char* argv[]) {
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
     std::signal(SIGPIPE, SIG_IGN);
+    std::signal(SIGUSR1, on_usr);
+    std::signal(SIGUSR2, on_usr);
 
     std::string name = "Steam Link";
     std::string url;
@@ -318,11 +339,31 @@ int main(int argc, char* argv[]) {
     }
 
     auto last_dial = std::chrono::steady_clock::now();
+    auto next_reopen = std::chrono::steady_clock::time_point::max();
+    int reopen_tries = 0;
     bool was_connected = false;
     int tick = 0;
     while (running.load()) {
         client.loop();
         if (window && (++tick % 10) == 0) sl::sdl.PumpEvents();
+        if (release_audio.exchange(false)) {
+            sink.suspend();
+            next_reopen = std::chrono::steady_clock::time_point::max();
+        }
+        if (reopen_audio.exchange(false)) {
+            reopen_tries = 0;
+            next_reopen = std::chrono::steady_clock::now();
+        }
+        if (std::chrono::steady_clock::now() >= next_reopen) {
+            if (sink.resume()) {
+                next_reopen = std::chrono::steady_clock::time_point::max();
+            } else if (++reopen_tries < 15) {
+                next_reopen = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+            } else {
+                fprintf(stderr, "audio: couldn't reopen the audio device; restarting\n");
+                running.store(false);
+            }
+        }
         bool connected = client.is_connected();
         if (connected != was_connected) {
             fprintf(stderr, ">>> %s\n", connected ? "server connected" : "server disconnected");

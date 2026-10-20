@@ -31,7 +31,8 @@ Download from the [latest release](../../releases/latest).
 
 Run `SteamLinkSpeaker.exe`. A page opens in your browser:
 
-1. **Find your Steam Link.** It searches your network and lists Steam Links first.
+1. **Find your Steam Link.** It searches your network and lists Steam Links first, recognized
+   by their Valve network hardware.
 2. **Sign in** with the Steam Link's SSH password.
 3. **Choose how it plays**: the name to show in Music Assistant, and Music Assistant's address.
    It's filled in automatically when Music Assistant is found on the network.
@@ -66,7 +67,8 @@ the speaker takes over. The TV keeps showing the last frame; that's expected.
 
 When the TV or receiver is switched off and on again, HDMI has to be set up again. The speaker
 notices, lets the Steam Link interface start for about 10 seconds to do that, and then takes
-over again, so there's no need to restart the Steam Link.
+over again, so there's no need to restart the Steam Link. It stays connected to Music Assistant
+meanwhile: music already playing pauses for those seconds and then continues.
 
 From the app's **Manage** section, or with the script:
 
@@ -86,7 +88,7 @@ Install again at any time to upgrade; your settings are kept.
 **No sound.** Check the player log. A healthy boot looks like this:
 
 ```
-supervisor version 7 starting (boot)
+supervisor version 8 starting (boot)
 media server up after 0s
 Steam Link interface up after 2s; letting it finish starting
 stopped the Steam Link interface
@@ -132,7 +134,9 @@ encrypted handshake with the newer server library but hasn't been tested end to 
   interface, pauses the power manager and the interface's relaunch script, closes the
   interface, and runs the player. It restarts the player if it exits, and takes over again if
   the interface comes back. When the media server logs a display reconnect (`HPD detected` in
-  `/mnt/scratch/log/PE_server.log`), it briefly resumes the interface so HDMI is set up again.
+  `/mnt/scratch/log/PE_server.log`) and the link has settled, it asks the player to release the
+  audio device (`SIGUSR2`), briefly resumes the interface so HDMI is set up again, then has the
+  player reopen the device (`SIGUSR1`) without dropping its connection.
 - **On the Steam Link**, everything lives in `/mnt/scratch/sendspin` plus the startup script in
   `/mnt/config/overlay/etc/init.d/startup/S99steam`.
 - **The installers** (`app/`, `host/`) carry the player inside them, send it over SSH and run

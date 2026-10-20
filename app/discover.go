@@ -17,7 +17,8 @@ import (
 type Device struct {
 	IP        string `json:"ip"`
 	Name      string `json:"name"`
-	SteamLink bool   `json:"steamLink"` // name looks like a Steam Link
+	MAC       string `json:"mac,omitempty"`
+	SteamLink bool   `json:"steamLink"` // Valve network card, or a name like a Steam Link
 	Installed bool   `json:"installed"` // the Sendspin player answers on its port
 }
 
@@ -103,6 +104,22 @@ func findDevices(ctx context.Context) []Device {
 		}
 	}
 	wg.Wait()
+
+	// Every device we just contacted is in the ARP table now. Steam Links have Valve network
+	// hardware (prefix E0:31:9E, registered in 2015 for it), and are named steamlink-XXXX after
+	// the end of that address when the network has no name for them.
+	macs := arpTable()
+	for i := range out {
+		d := &out[i]
+		d.MAC = macs[d.IP]
+		if strings.HasPrefix(d.MAC, valvePrefix) {
+			d.SteamLink = true
+			if d.Name == "" && len(d.MAC) == 17 {
+				d.Name = "steamlink-" + strings.ToUpper(strings.ReplaceAll(d.MAC[12:], ":", ""))
+			}
+		}
+	}
+
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.SteamLink != b.SteamLink {
@@ -124,6 +141,9 @@ func ipLess(a, b string) bool {
 }
 
 const serverService = "_sendspin-server._tcp.local."
+
+// Valve Corporation's MAC address prefix (IEEE MA-L E0-31-9E).
+const valvePrefix = "e0:31:9e:"
 
 // findServers asks the network for Sendspin servers (Music Assistant) over mDNS. The query goes
 // out from an ordinary port, so responders answer us directly (RFC 6762 legacy unicast).

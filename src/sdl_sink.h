@@ -33,6 +33,13 @@ public:
 
     /// Opens (or keeps) the device for this format. Safe to call on every stream start.
     bool configure(uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample);
+
+    /// Lets go of the audio device and SDL's audio subsystem, e.g. while the Steam Link
+    /// interface sets HDMI up again. Writes wait (as for a full device) until resume().
+    void suspend();
+    /// Re-initializes SDL audio and reopens the device in the last configured format.
+    bool resume();
+    bool suspended() const { return suspended_.load(); }
     size_t write(const uint8_t* data, size_t length, uint32_t timeout_ms);
     void clear();
     void close();
@@ -58,6 +65,12 @@ private:
     std::mutex write_mutex_;
     std::condition_variable write_cv_;
     std::atomic<bool> abort_write_{false};
+
+    std::recursive_mutex config_mutex_;  // configure / suspend / resume from different threads
+    std::atomic<bool> suspended_{false};
+    uint32_t want_rate_{48000};
+    uint8_t want_channels_{2};
+    uint8_t want_bits_{16};
 
     uint32_t device_{0};
     uint32_t sample_rate_{0};
