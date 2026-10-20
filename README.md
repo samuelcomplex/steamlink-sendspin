@@ -64,6 +64,10 @@ same app as the Windows one.
 At boot the Steam Link starts as usual, shows its interface for about half a minute, and then
 the speaker takes over. The TV keeps showing the last frame; that's expected.
 
+When the TV or receiver is switched off and on again, HDMI has to be set up again. The speaker
+notices, lets the Steam Link interface start for about 10 seconds to do that, and then takes
+over again, so there's no need to restart the Steam Link.
+
 From the app's **Manage** section, or with the script:
 
 | Action | App button | Script command |
@@ -82,7 +86,7 @@ Install again at any time to upgrade; your settings are kept.
 **No sound.** Check the player log. A healthy boot looks like this:
 
 ```
-supervisor version 6 starting (boot)
+supervisor version 7 starting (boot)
 media server up after 0s
 Steam Link interface up after 2s; letting it finish starting
 stopped the Steam Link interface
@@ -127,7 +131,8 @@ encrypted handshake with the newer server library but hasn't been tested end to 
 - **The supervisor** (`device/run.sh`) waits for the media server and the Steam Link
   interface, pauses the power manager and the interface's relaunch script, closes the
   interface, and runs the player. It restarts the player if it exits, and takes over again if
-  the interface comes back.
+  the interface comes back. When the media server logs a display reconnect (`HPD detected` in
+  `/mnt/scratch/log/PE_server.log`), it briefly resumes the interface so HDMI is set up again.
 - **On the Steam Link**, everything lives in `/mnt/scratch/sendspin` plus the startup script in
   `/mnt/config/overlay/etc/init.d/startup/S99steam`.
 - **The installers** (`app/`, `host/`) carry the player inside them, send it over SSH and run

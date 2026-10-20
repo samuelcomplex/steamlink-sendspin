@@ -1,5 +1,5 @@
 #!/bin/sh
-# version 6 (2026-10-20): old-BusyBox-safe trap (v3-v5 died before starting the player)
+# version 7 (2026-10-20): brings HDMI back after the TV or receiver was switched off and on
 #
 # sendspin-steamlink supervisor: runs the player, restarts it if it exits, and keeps the
 # Steam Link interface from taking the audio device back.
@@ -12,6 +12,8 @@ SS=/mnt/scratch/sendspin
 LOG=$SS/log.txt
 TRACE=$SS/trace.txt
 PIDFILE=/var/run/sendspin-run.pid
+PAUSED=/var/run/sendspin-paused   # processes we paused, so they can be resumed
+PELOG=/mnt/scratch/log/PE_server.log
 
 sslog() { echo "=== $(date) $*" >> $LOG; }
 
@@ -35,7 +37,7 @@ LATENCY_MS=0
 EXTRA_ARGS=""
 [ -f $SS/sendspin.conf ] && . $SS/sendspin.conf
 
-sslog "supervisor version 6 starting ($*)"
+sslog "supervisor version 7 starting ($*)"
 
 # Live (not zombie) Steam Link interface processes. A killed interface whose parent is paused
 # stays behind as a zombie, and BusyBox pidof still lists it.
@@ -48,9 +50,14 @@ ui_pids() {
 
 # Pauses the scripts that (re)launch the Steam Link interface or put the device to sleep, then
 # stops the interface ("shell") itself. Logs $1 and returns 0 if the interface was running.
+pause() {
+    kill -STOP "$1" 2>/dev/null || return
+    grep -q "^$1\$" $PAUSED 2>/dev/null || echo "$1" >> $PAUSED
+}
+
 stop_ui() {
     for pid in $(ps | grep -E '[s]hell\.sh|[p]owermanager' | awk '{print $1}'); do
-        kill -STOP "$pid" 2>/dev/null
+        pause "$pid"
     done
     found=""
     for pid in $(ui_pids); do
@@ -58,7 +65,7 @@ stop_ui() {
         if [ -n "$ppid" ] && [ "$ppid" -gt 1 ]; then
             pcmd=$(tr '\0' ' ' < /proc/$ppid/cmdline 2>/dev/null)
             case "$pcmd" in
-                *shell*|*steam*|*powermanager*|*rc.local*) kill -STOP "$ppid" 2>/dev/null ;;
+                *shell*|*steam*|*powermanager*|*rc.local*) pause "$ppid" ;;
             esac
         fi
         kill "$pid" 2>/dev/null
@@ -71,6 +78,32 @@ stop_ui() {
         return 0
     fi
     return 1
+}
+
+# How many times the media server has seen a display connect ("HPD detected"). When a TV or
+# receiver is switched off and on, HDMI drops and comes back, but nothing switches the output on
+# again: that's done by the Steam Link interface, which we keep stopped.
+hpd_count() {
+    n=$(grep -c 'HPD detected' $PELOG 2>/dev/null)
+    echo "${n:-0}"
+}
+
+# Brings HDMI back the way it comes up at boot: lets the Steam Link interface start, gives it a
+# few seconds, then stops it again and restarts the player.
+wake_hdmi() {
+    sslog "display reconnected; letting the Steam Link interface bring HDMI back up"
+    for pid in $(cat $PAUSED 2>/dev/null); do kill -CONT "$pid" 2>/dev/null; done
+    rm -f $PAUSED
+    i=0
+    while [ $i -lt 20 ] && [ -z "$(ui_pids)" ]; do sleep 1; i=$((i + 1)); done
+    if [ -n "$(ui_pids)" ]; then
+        sleep 8
+        stop_ui "stopped the Steam Link interface again"
+    else
+        sslog "the interface didn't start within ${i}s; restarting the player only"
+        stop_ui "stopped the Steam Link interface" || true
+    fi
+    killall sendspin-steamlink 2>/dev/null
 }
 
 if [ "$1" = boot ]; then
@@ -94,8 +127,17 @@ stop_ui "stopped the Steam Link interface"
 # restart the player so it reopens the HDMI audio device.
 (
     set +x
+    seen=$(hpd_count)
     while [ -f $SS/enabled ]; do
-        if stop_ui "Steam Link interface was running again; stopped it, restarting the player"; then
+        now=$(hpd_count)
+        if [ "$now" -gt "$seen" ] 2>/dev/null; then
+            sleep 2   # let the media server finish reading the display's capabilities
+            wake_hdmi
+            sleep 5
+            seen=$(hpd_count)   # starting the interface can itself log a reconnect
+        elif [ "$now" -lt "$seen" ] 2>/dev/null; then
+            seen=$now           # the media server's log was restarted
+        elif stop_ui "Steam Link interface was running again; stopped it, restarting the player"; then
             killall sendspin-steamlink 2>/dev/null
         fi
         sleep 3
