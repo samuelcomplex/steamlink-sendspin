@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// arpTable maps IPv4 addresses to MAC addresses ("e0:31:9e:12:67:e4") from the kernel's
+// arpTable maps IPv4 addresses to MAC addresses ("e0:31:9e:ab:cd:ef") from the kernel's
 // neighbour table. Devices appear there once we've contacted them.
 func arpTable() map[string]string {
 	out := map[string]string{}

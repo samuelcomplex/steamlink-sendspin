@@ -267,7 +267,7 @@ func findServers(ctx context.Context) []Server {
 	return out
 }
 
-// normalizeServer turns what a person types ("192.168.1.6", "192.168.1.6:8927",
+// normalizeServer turns what a person types ("192.168.1.20", "192.168.1.20:8927",
 // "ws://...") into a Sendspin URL.
 func normalizeServer(s string) string {
 	s = strings.TrimSpace(s)

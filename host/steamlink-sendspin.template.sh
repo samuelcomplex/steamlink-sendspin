@@ -17,7 +17,7 @@
 #
 # Settings for install (asked for when not given):
 #   NAME="Living Room"                 player name in Music Assistant
-#   SERVER_URL=192.168.1.6             Music Assistant's address (found automatically if possible)
+#   SERVER_URL=192.168.1.20            Music Assistant's address (found automatically if possible)
 #
 # Each command asks for the Steam Link's SSH password once (steamlink123 unless changed).
 # The player binary is embedded at the end of this file (build: @BUILD_INFO@).

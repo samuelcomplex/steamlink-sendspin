@@ -6,7 +6,7 @@
 NAME=""
 
 # Music Assistant's address, only if it isn't found automatically, for example:
-# SERVER_URL="192.168.1.6"
+# SERVER_URL="192.168.1.20"
 SERVER_URL=""
 
 # If this speaker plays LATE compared to your other speakers, raise this (milliseconds, e.g. 50).

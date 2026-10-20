@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
         }
     }
     SendspinClient::set_log_level(level);
-    // Accept a bare address ("192.168.1.6", "192.168.1.6:8927") as well as a full URL.
+    // Accept a bare address ("192.168.1.20", "192.168.1.20:8927") as well as a full URL.
     if (!url.empty() && url.find("://") == std::string::npos) {
         std::string host = url;
         if (host.find(':') == std::string::npos) host += ":8927";

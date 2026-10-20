@@ -79,7 +79,7 @@ bash steamlink-sendspin.sh
 Or give everything at once, for example from the Music Assistant server:
 
 ```sh
-NAME="Living Room" bash steamlink-sendspin.sh install 192.168.1.133
+NAME="Living Room" bash steamlink-sendspin.sh install 192.168.1.50
 ```
 
 Prefer the browser app? `steamlink-speaker-linux-x64` (or `-arm64`, for a Raspberry Pi) is the
