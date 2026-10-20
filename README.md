@@ -143,8 +143,9 @@ pip install ziglang
 ./build.sh encrypted  # Sendspin 1.0 servers
 ```
 
-Everything lands in `dist/`. Releases are built the same way by GitHub Actions
-(`.github/workflows/build.yml`) whenever a `v*` tag is pushed.
+Everything lands in `dist/`. GitHub Actions (`.github/workflows/build.yml`) builds the same way
+on every push. To publish a release, open **Actions > Build > Run workflow** and enter a version
+such as `v1.0.1`; pushing a `v*` tag works too.
 
 ## Status
 

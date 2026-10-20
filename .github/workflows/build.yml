@@ -1,13 +1,19 @@
 name: Build
 
 # Builds the Steam Link player, the Linux script and the installer apps on every push and pull
-# request. Pushing a tag like v1.0.0 also publishes them as a GitHub release.
+# request. To publish a release: Actions > Build > Run workflow, and enter a version like v1.0.0
+# (or push a tag like v1.0.0).
 on:
   push:
     branches: [main]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Publish as a release with this version, e.g. v1.0.0 (leave empty to only build)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -42,14 +48,20 @@ jobs:
           path: dist/
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version || github.ref_name }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          case "$VERSION" in
+            v[0-9]*) ;;
+            *) echo "Version must look like v1.0.0, got '$VERSION'"; exit 1 ;;
+          esac
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" dist/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* \
-              --title "Steam Link Speaker $GITHUB_REF_NAME" \
+            # Creates the tag on the commit that was just built if it doesn't exist yet.
+            gh release create "$VERSION" dist/* --target "$GITHUB_SHA" \
+              --title "Steam Link Speaker $VERSION" \
               --notes-file .github/release-notes.md
           fi
