@@ -36,7 +36,6 @@ struct SDL_AudioSpec {
 struct Sdl2 {
     int (*Init)(uint32_t) = nullptr;
     int (*InitSubSystem)(uint32_t) = nullptr;
-    void (*QuitSubSystem)(uint32_t) = nullptr;
     void (*Quit)() = nullptr;
     const char* (*GetError)() = nullptr;
     const char* (*GetCurrentAudioDriver)() = nullptr;

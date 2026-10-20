@@ -1,5 +1,5 @@
 #!/bin/sh
-# version 8 (2026-10-21): HDMI comes back after a TV/receiver off-on without dropping the stream
+# version 9 (2026-10-21): after a TV/receiver off-on, HDMI is set up again and the player rejoins
 #
 # sendspin-steamlink supervisor: runs the player, restarts it if it exits, and keeps the
 # Steam Link interface from taking the audio device back.
@@ -37,7 +37,7 @@ LATENCY_MS=0
 EXTRA_ARGS=""
 [ -f $SS/sendspin.conf ] && . $SS/sendspin.conf
 
-sslog "supervisor version 8 starting ($*)"
+sslog "supervisor version 9 starting ($*)"
 
 # Live (not zombie) Steam Link interface processes. A killed interface whose parent is paused
 # stays behind as a zombie, and BusyBox pidof still lists it.
@@ -88,22 +88,16 @@ hpd_count() {
     echo "${n:-0}"
 }
 
-# Sends a signal to the player: 12 (USR2) = let go of the audio device, 10 (USR1) = reopen it.
-# The player stays connected to Music Assistant either way. Numbers, for old BusyBox.
-player_signal() {
-    for pid in $(pidof sendspin-steamlink 2>/dev/null); do kill -$1 "$pid" 2>/dev/null; done
-}
-
 # The display's last reported state in the media server's log: 1 = connected, 0 = gone.
 hpd_state() {
     grep 'HPD=' $PELOG 2>/dev/null | tail -1 | sed -n 's/.*HPD=\([01]\).*/\1/p'
 }
 
 # Brings HDMI back the way it comes up at boot: lets the Steam Link interface start, gives it a
-# few seconds, then stops it again. The player only lets go of the audio device meanwhile.
+# few seconds, then stops it again and restarts the player. The player says goodbye as
+# "restart", so Music Assistant keeps it in its group and puts it back into the running stream.
 wake_hdmi() {
     sslog "display reconnected; letting the Steam Link interface set up HDMI again"
-    player_signal 12
     for pid in $(cat $PAUSED 2>/dev/null); do kill -CONT "$pid" 2>/dev/null; done
     rm -f $PAUSED
     i=0
@@ -112,11 +106,11 @@ wake_hdmi() {
         sleep 8
         stop_ui "HDMI is set up; stopped the Steam Link interface again"
     else
-        sslog "the interface didn't start within ${i}s; reopening audio anyway"
+        sslog "the interface didn't start within ${i}s"
         stop_ui "stopped the Steam Link interface" || true
     fi
-    sleep 1
-    player_signal 10
+    sslog "restarting the player"
+    killall sendspin-steamlink 2>/dev/null
 }
 
 if [ "$1" = boot ]; then
@@ -161,9 +155,8 @@ stop_ui "stopped the Steam Link interface"
             seen=$(hpd_count)   # starting the interface can itself log a reconnect
         elif [ "$now" -lt "$seen" ] 2>/dev/null; then
             seen=$now           # the media server's log was restarted
-        elif stop_ui "Steam Link interface was running again; stopped it, reopening audio"; then
-            sleep 1
-            player_signal 10
+        elif stop_ui "Steam Link interface was running again; stopped it, restarting the player"; then
+            killall sendspin-steamlink 2>/dev/null
         fi
         sleep 3
     done

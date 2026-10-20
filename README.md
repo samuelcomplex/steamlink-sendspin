@@ -67,9 +67,9 @@ the speaker takes over. The TV keeps showing the last frame; that's expected.
 
 When the TV or receiver is switched off and on again, HDMI has to be set up again. The speaker
 notices, lets the Steam Link interface start for about 10 seconds to do that, and then takes
-over again, so there's no need to restart the Steam Link. It stays connected to Music Assistant
-meanwhile, so nothing stops: that speaker is silent for those seconds and then rejoins in sync,
-and other speakers in the same group keep playing.
+over again, so there's no need to restart the Steam Link. That speaker is silent for about
+15 seconds and then rejoins the music in sync by itself; other speakers in the same group keep
+playing throughout. The same goes for restarting the Steam Link while music is playing.
 
 From the app's **Manage** section, or with the script:
 
@@ -89,7 +89,7 @@ Install again at any time to upgrade; your settings are kept.
 **No sound.** Check the player log. A healthy boot looks like this:
 
 ```
-supervisor version 8 starting (boot)
+supervisor version 9 starting (boot)
 media server up after 0s
 Steam Link interface up after 2s; letting it finish starting
 stopped the Steam Link interface
@@ -135,9 +135,11 @@ encrypted handshake with the newer server library but hasn't been tested end to 
   interface, pauses the power manager and the interface's relaunch script, closes the
   interface, and runs the player. It restarts the player if it exits, and takes over again if
   the interface comes back. When the media server logs a display reconnect (`HPD detected` in
-  `/mnt/scratch/log/PE_server.log`) and the link has settled, it asks the player to release the
-  audio device (`SIGUSR2`), briefly resumes the interface so HDMI is set up again, then has the
-  player reopen the device (`SIGUSR1`) without dropping its connection.
+  `/mnt/scratch/log/PE_server.log`) and the link has settled, it briefly resumes the interface
+  so HDMI is set up again, then restarts the player.
+- **Rejoining:** the player always says goodbye with the reason `restart`, never `shutdown`. Music
+  Assistant then keeps it in its group for a few minutes and puts it straight back into a running
+  stream when it reconnects; after `shutdown` it would forget the group.
 - **On the Steam Link**, everything lives in `/mnt/scratch/sendspin` plus the startup script in
   `/mnt/config/overlay/etc/init.d/startup/S99steam`.
 - **The installers** (`app/`, `host/`) carry the player inside them, send it over SSH and run

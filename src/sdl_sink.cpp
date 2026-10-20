@@ -71,13 +71,6 @@ void SdlSink::ring_reset_() {
 // ---------------------------------------------------------------- device
 
 bool SdlSink::configure(uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample) {
-    std::lock_guard<std::recursive_mutex> cfg(config_mutex_);
-    want_rate_ = sample_rate;
-    want_channels_ = channels;
-    want_bits_ = bits_per_sample;
-    if (suspended_.load()) {
-        return true;  // opened in this format on resume()
-    }
     if (device_ != 0 && sample_rate == sample_rate_ && channels == channels_ &&
         bits_per_sample == bits_) {
         clear();
@@ -142,36 +135,6 @@ void SdlSink::close() {
     sample_rate_ = 0;
 }
 
-void SdlSink::suspend() {
-    std::lock_guard<std::recursive_mutex> cfg(config_mutex_);
-    if (suspended_.exchange(true)) return;
-    close();
-    sdl.QuitSubSystem(SDL_INIT_AUDIO);
-    fprintf(stderr, "audio: released the audio device\n");
-}
-
-bool SdlSink::resume() {
-    std::lock_guard<std::recursive_mutex> cfg(config_mutex_);
-    if (device_ != 0) {
-        close();
-        sdl.QuitSubSystem(SDL_INIT_AUDIO);
-    }
-    if (sdl.InitSubSystem(SDL_INIT_AUDIO) != 0) {
-        fprintf(stderr, "audio: SDL audio re-init failed: %s\n", sdl.GetError());
-        suspended_.store(true);
-        return false;
-    }
-    suspended_.store(false);
-    if (!configure(want_rate_, want_channels_, want_bits_)) {
-        sdl.QuitSubSystem(SDL_INIT_AUDIO);
-        suspended_.store(true);
-        return false;
-    }
-    write_cv_.notify_all();
-    fprintf(stderr, "audio: reopened the audio device\n");
-    return true;
-}
-
 void SdlSink::clear() {
     clear_requested_.store(true, std::memory_order_release);
 }
@@ -179,12 +142,6 @@ void SdlSink::clear() {
 size_t SdlSink::write(const uint8_t* data, size_t length, uint32_t timeout_ms) {
     size_t total = 0;
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    if (suspended_.load()) {
-        // Behave like a device that isn't taking audio right now, rather than spinning.
-        std::unique_lock<std::mutex> lock(write_mutex_);
-        write_cv_.wait_until(lock, deadline, [this] { return !suspended_.load(); });
-        return 0;
-    }
     while (total < length) {
         {
             std::lock_guard<std::mutex> lock(write_mutex_);

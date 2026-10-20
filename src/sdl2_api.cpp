@@ -29,7 +29,6 @@ bool Sdl2::load(const char* soname) {
     bool ok = true;
     ok &= bind(lib, Init, "SDL_Init", true);
     ok &= bind(lib, InitSubSystem, "SDL_InitSubSystem", true);
-    ok &= bind(lib, QuitSubSystem, "SDL_QuitSubSystem", true);
     ok &= bind(lib, Quit, "SDL_Quit", true);
     ok &= bind(lib, GetError, "SDL_GetError", true);
     ok &= bind(lib, GetCurrentAudioDriver, "SDL_GetCurrentAudioDriver", false);
