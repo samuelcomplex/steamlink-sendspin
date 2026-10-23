@@ -69,11 +69,22 @@ install)
     for f in sendspin-steamlink run.sh ctl.sh; do
         put "$SRC/$f" "$SS/$f" || { echo "ERROR: couldn't update $SS/$f"; exit 1; }
     done
+    [ -f "$SRC/slcec" ] && put "$SRC/slcec" "$SS/slcec"
     echo "Installed $(grep -m1 '^# version' $SS/run.sh)"
     # The black-screen option (-V, now default) is obsolete: drop it from kept settings.
     sed -i 's/^EXTRA_ARGS="-V"$/EXTRA_ARGS=""/' $SS/sendspin.conf 2>/dev/null
     if [ -f $SS/sendspin.conf ]; then
         echo "Keeping existing settings in $SS/sendspin.conf"
+        # Except the receiver-volume choice, which the installer asks every time.
+        avr=$(grep '^AVR_VOLUME_STEPS=' "$SRC/sendspin.conf" 2>/dev/null)
+        if [ -n "$avr" ]; then
+            if grep -q '^AVR_VOLUME_STEPS=' $SS/sendspin.conf; then
+                sed -i "s/^AVR_VOLUME_STEPS=.*/$avr/" $SS/sendspin.conf
+            else
+                printf '\n# Receiver volume over HDMI: volume steps for the whole 0-100 slider, 0 = off.\n%s\n' "$avr" >> $SS/sendspin.conf
+            fi
+            echo "Receiver volume over HDMI: ${avr#AVR_VOLUME_STEPS=} steps (0 = off)"
+        fi
     else
         cp -f "$SRC/sendspin.conf" $SS/sendspin.conf
     fi

@@ -12,7 +12,8 @@ DEV=$(grep ' /mnt/disk ' /proc/mounts | awk '{print $1}' | head -1)
 rm -rf /tmp/sendspin
 mkdir -p /tmp/sendspin
 cp "$SPEAKER/sendspin-steamlink" "$SPEAKER/supervisor.sh" /tmp/sendspin/ || exit 0
-chmod +x /tmp/sendspin/sendspin-steamlink /tmp/sendspin/supervisor.sh
+cp "$SPEAKER/slcec" /tmp/sendspin/ 2>/dev/null
+chmod +x /tmp/sendspin/sendspin-steamlink /tmp/sendspin/supervisor.sh /tmp/sendspin/slcec 2>/dev/null
 echo "$DEV" > /tmp/sendspin/usb-device
 
 if command -v setsid >/dev/null 2>&1; then

@@ -21,7 +21,7 @@ set(SENDSPIN_USE_CCACHE OFF CACHE BOOL "" FORCE)
 set(SENDSPIN_CPP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sendspin-cpp" CACHE PATH "sendspin-cpp checkout")
 add_subdirectory(${SENDSPIN_CPP_DIR} sendspin-cpp)
 
-set(APP_SOURCES src/main.cpp src/sdl_sink.cpp src/sdl2_api.cpp src/discovery.cpp)
+set(APP_SOURCES src/main.cpp src/sdl_sink.cpp src/sdl2_api.cpp src/discovery.cpp src/cec_volume.cpp)
 if(NOT SENDSPIN_LEGACY_API)
     list(APPEND APP_SOURCES ${SENDSPIN_CPP_DIR}/examples/common/file_persistence_provider.cpp)
 endif()
@@ -42,3 +42,7 @@ endif()
 
 string(TIMESTAMP SL_BUILD_STAMP "%Y-%m-%d %H:%M UTC" UTC)
 target_compile_definitions(sendspin-steamlink PRIVATE SL_BUILD_STAMP="${SL_BUILD_STAMP}")
+
+# slcec: sends HDMI-CEC commands (receiver volume) through the Steam Link's Marvell libraries.
+add_executable(slcec src/slcec.c)
+target_link_libraries(slcec PRIVATE ${CMAKE_DL_LIBS})

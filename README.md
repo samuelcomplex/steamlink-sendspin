@@ -109,6 +109,25 @@ From the app's **Manage** section, or with the script:
 
 Install again at any time to upgrade; your settings are kept.
 
+## Receiver volume over HDMI
+
+If the Steam Link is plugged into an AV receiver, Music Assistant's volume can turn the
+receiver's own volume up and down over HDMI (CEC), instead of making the audio quieter. Tick
+**Control the receiver's volume over HDMI** in the app before installing, or set
+`AVR_VOLUME_STEPS=50` in the settings (`settings.txt` on the USB stick) and restart.
+
+- The receiver needs its HDMI control (CEC) setting turned on.
+- CEC can only step the volume, not set it, so the speaker follows how far the slider moves:
+  `AVR_VOLUME_STEPS` presses for the whole 0-100 range. The volume Music Assistant shows when
+  the speaker starts is taken as where the receiver already is; if they drift apart (someone
+  used the receiver's remote), move the slider to the end and back.
+- Mute is done by the speaker itself, so it never gets out of step with the receiver.
+- Leave it off for a TV or soundbar: if they ignore the commands, the volume slider would do
+  nothing.
+
+`slcec`, installed next to the player, sends the commands and can be used by hand over SSH:
+`slcec volup 3`, `slcec voldown`, `slcec mute`, `slcec standby`.
+
 ## Troubleshooting
 
 **No sound.** Check the player log. A healthy boot looks like this:

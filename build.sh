@@ -36,7 +36,7 @@ echo "highest glibc symbol: $NEED"
 
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
-cp "$BUILD/sendspin-steamlink" device/run.sh device/ctl.sh device/S99steam "$STAGE/"
+cp "$BUILD/sendspin-steamlink" "$BUILD/slcec" device/run.sh device/ctl.sh device/S99steam "$STAGE/"
 chmod +x "$STAGE"/*
 mkdir -p dist
 OUT=dist/steamlink-sendspin.sh
@@ -48,15 +48,16 @@ echo "packed $OUT ($(du -h "$OUT" | cut -f1))"
 
 # The USB version: unzip onto a FAT32 stick. The Steam Link runs steamlink/factory_test/run.sh
 # from the stick at boot; nothing is installed on it.
-python3 - "$BUILD/sendspin-steamlink" dist/steamlink-speaker-usb.zip <<'PYEOF'
+python3 - "$BUILD/sendspin-steamlink" dist/steamlink-speaker-usb.zip "$BUILD/slcec" <<'PYEOF'
 import sys, zipfile
-player, out = sys.argv[1], sys.argv[2]
+player, out, slcec = sys.argv[1], sys.argv[2], sys.argv[3]
 files = {
     "READ ME.txt": "device/usb/READ ME.txt",
     "steamlink/factory_test/run.sh": "device/usb/factory_test/run.sh",
     "steamlink/speaker/supervisor.sh": "device/run.sh",
     "steamlink/speaker/settings.txt": "device/usb/speaker/settings.txt",
     "steamlink/speaker/sendspin-steamlink": player,
+    "steamlink/speaker/slcec": slcec,
 }
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for name, src in files.items():
@@ -74,7 +75,7 @@ PYEOF
 if command -v go >/dev/null && [ "${SKIP_APPS:-0}" != 1 ]; then
     # Resolve the Go libraries (a local app/go.work, if present, overrides where they come from).
     (cd app && { [ -f go.work ] || [ -f go.sum ] || go mod tidy; })
-    (cd "$STAGE" && tar --format=ustar -czf "$OLDPWD/app/payload.tar.gz" sendspin-steamlink run.sh ctl.sh S99steam)
+    (cd "$STAGE" && tar --format=ustar -czf "$OLDPWD/app/payload.tar.gz" sendspin-steamlink slcec run.sh ctl.sh S99steam)
     if [ "$VARIANT" = legacy ]; then FOR="Music Assistant 2.10"; else FOR="Sendspin 1.0 servers"; fi
     INFO="built $(date -u +%Y-%m-%d) for $FOR"
     (cd app && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath \

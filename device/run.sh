@@ -1,5 +1,5 @@
 #!/bin/sh
-# version 10 (2026-10-21): also runs from a USB stick ("usb" mode); finds Music Assistant itself
+# version 11 (2026-10-23): optional receiver volume over HDMI-CEC (AVR_VOLUME_STEPS)
 #
 # sendspin-steamlink supervisor: runs the player, restarts it if it exits, and keeps the
 # Steam Link interface from taking the audio device back.
@@ -54,7 +54,7 @@ fi
 echo $$ > $PIDFILE
 
 if [ $MODE = usb ]; then
-    sslog "supervisor version 10 starting (USB stick $USBDEV)"
+    sslog "supervisor version 11 starting (USB stick $USBDEV)"
     if [ -f /mnt/scratch/sendspin/enabled ]; then
         sslog "this Steam Link has the installed version; the USB stick isn't needed. Stopping."
         rm -f $PIDFILE
@@ -76,13 +76,14 @@ if [ $MODE = usb ]; then
         sslog "couldn't mount the USB stick for the log; keeping it in RAM"
     fi
 else
-    sslog "supervisor version 10 starting ($*)"
+    sslog "supervisor version 11 starting ($*)"
 fi
 
 NAME=""
 SERVER_URL=""
 DELAY_MS=0
 LATENCY_MS=0
+AVR_VOLUME_STEPS=0
 EXTRA_ARGS=""
 [ -f $SS/sendspin.conf ] && . $SS/sendspin.conf
 
@@ -241,6 +242,7 @@ while active; do
     set --
     [ -n "$NAME" ] && set -- -n "$NAME"
     [ -n "$SERVER_URL" ] && set -- "$@" -u "$SERVER_URL"
+    [ "${AVR_VOLUME_STEPS:-0}" -gt 0 ] 2>/dev/null && set -- "$@" -C "$AVR_VOLUME_STEPS"
     # shellcheck disable=SC2086
     $SS/sendspin-steamlink "$@" -s $DATA/state -d "$DELAY_MS" -L "$LATENCY_MS" $EXTRA_ARGS \
         >> $LOG 2>&1

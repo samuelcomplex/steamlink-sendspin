@@ -145,6 +145,7 @@ type runRequest struct {
 	Password string `json:"password"`
 	Name     string `json:"name"`
 	Server   string `json:"server"`
+	AVR      bool   `json:"avr"`
 }
 
 // flushWriter sends each write to the browser straight away.
@@ -185,7 +186,7 @@ func (a *app) runAction(w http.ResponseWriter, r *http.Request) {
 	var err error
 	if req.Action == "install" {
 		err = install(ctx, req.Host, req.Password,
-			Settings{Name: req.Name, ServerURL: normalizeServer(req.Server)}, out)
+			Settings{Name: req.Name, ServerURL: normalizeServer(req.Server), AVRVolume: req.AVR}, out)
 	} else {
 		err = deviceCommand(ctx, req.Host, req.Password, req.Action, out)
 	}

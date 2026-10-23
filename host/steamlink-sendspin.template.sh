@@ -152,6 +152,12 @@ SERVER_URL="${SERVER_URL:-}"
 LATENCY_MS=0
 DELAY_MS=0
 
+# Receiver volume over HDMI: if the Steam Link is plugged into an AV receiver, Music
+# Assistant's volume can turn the receiver's own volume up and down instead of making the
+# audio quieter. The number is how many volume steps the whole 0-100 slider covers
+# (try 50). 0 = off. Not for TVs or soundbars that don't take HDMI volume commands.
+AVR_VOLUME_STEPS=0
+
 # Extra options: -l debug for more logging.
 EXTRA_ARGS=""
 

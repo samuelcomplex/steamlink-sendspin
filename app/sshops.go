@@ -111,6 +111,7 @@ func run(ctx context.Context, host, password, cmd string, stdin io.Reader, out i
 type Settings struct {
 	Name      string
 	ServerURL string
+	AVRVolume bool // Music Assistant's volume steps the receiver's volume over HDMI-CEC
 }
 
 // clean keeps a value safe inside a double-quoted shell assignment.
@@ -140,9 +141,22 @@ SERVER_URL="%s"
 LATENCY_MS=0
 DELAY_MS=0
 
+# Receiver volume over HDMI: if the Steam Link is plugged into an AV receiver, Music
+# Assistant's volume can turn the receiver's own volume up and down instead of making the
+# audio quieter. The number is how many volume steps the whole 0-100 slider covers
+# (try 50). 0 = off. Not for TVs or soundbars that don't take HDMI volume commands.
+AVR_VOLUME_STEPS=%d
+
 # Extra options: -l debug for more logging.
 EXTRA_ARGS=""
-`, clean(st.Name), clean(st.ServerURL)))
+`, clean(st.Name), clean(st.ServerURL), avrSteps(st.AVRVolume)))
+}
+
+func avrSteps(on bool) int {
+	if on {
+		return 50
+	}
+	return 0
 }
 
 // installBundle is the embedded device payload plus a sendspin.conf for these settings, as the

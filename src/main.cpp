@@ -20,10 +20,14 @@
 //   -L MS     Extra output latency estimate for the HDMI/receiver pipeline
 //   -W        Open a black fullscreen window (off by default: it crashes while the
 //             Steam Link interface owns the display). -V is accepted and ignored.
+//   -C STEPS  Control the AV receiver's volume over HDMI-CEC instead of scaling the audio:
+//             STEPS volume presses for the whole 0-100 range (0 = off, the default). Uses the
+//             slcec helper next to this program.
 //   -l LEVEL  none|error|warn|info|debug|verbose
 //
 // Licensed under the Apache License, Version 2.0.
 
+#include "cec_volume.h"
 #include "discovery.h"
 #include "sdl2_api.h"
 #include "sdl_sink.h"
@@ -36,6 +40,7 @@
 #endif
 
 #include <getopt.h>
+#include <unistd.h>
 
 #ifndef SL_BUILD_STAMP
 #define SL_BUILD_STAMP "dev"
@@ -48,6 +53,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <optional>
 #include <random>
 #include <string>
@@ -72,7 +78,7 @@ static bool parse_level(const char* s, LogLevel& out) {
 static void usage(const char* p) {
     fprintf(stderr,
             "Usage: %s [-n NAME] [-u URL] [-p PORT] [-s STATEFILE] [-a] [-t TOKENFILE]\n"
-            "          [-d DELAY_MS] [-L LATENCY_MS] [-W] [-l LEVEL]\n",
+            "          [-d DELAY_MS] [-L LATENCY_MS] [-C STEPS] [-W] [-l LEVEL]\n",
             p);
 }
 
@@ -144,10 +150,11 @@ int main(int argc, char* argv[]) {
     bool video = false;
     int delay_ms = 0;
     int latency_ms = 0;
+    int cec_steps = 0;
     LogLevel level = LogLevel::INFO;
 
     int opt;
-    while ((opt = getopt(argc, argv, "n:u:p:as:t:d:L:VWl:h")) != -1) {
+    while ((opt = getopt(argc, argv, "n:u:p:as:t:d:L:C:VWl:h")) != -1) {
         switch (opt) {
             case 'n': name = optarg; break;
             case 'u': url = optarg; break;
@@ -157,6 +164,7 @@ int main(int argc, char* argv[]) {
             case 't': token_file = optarg; break;
             case 'd': delay_ms = atoi(optarg); break;
             case 'L': latency_ms = atoi(optarg); break;
+            case 'C': cec_steps = atoi(optarg); break;
             case 'V': video = false; break;
             case 'W': video = true; break;
             case 'l':
@@ -220,6 +228,27 @@ int main(int argc, char* argv[]) {
     sl::SdlSink sink;
     sink.extra_latency_us = static_cast<int64_t>(latency_ms) * 1000;
 
+    // Receiver volume over HDMI: the audio stays at full level and the receiver's own volume
+    // follows Music Assistant. Mute stays in the player, where it can't get out of step.
+    std::unique_ptr<sl::CecVolume> cec;
+    if (cec_steps > 0) {
+        char exe[512];
+        ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+        std::string dir = ".";
+        if (n > 0) {
+            exe[n] = 0;
+            dir = exe;
+            dir = dir.substr(0, dir.rfind('/'));
+        }
+        std::string helper = dir + "/slcec";
+        if (access(helper.c_str(), X_OK) == 0) {
+            cec = std::make_unique<sl::CecVolume>(helper, cec_steps > 200 ? 200 : cec_steps);
+            fprintf(stderr, "sendspin: receiver volume over HDMI, %d steps for 0-100%%\n", cec_steps);
+        } else {
+            fprintf(stderr, "sendspin: %s not found; using the player's own volume\n", helper.c_str());
+        }
+    }
+
     // ---- Sendspin client
     SendspinClientConfig config;
     config.name = name;
@@ -260,7 +289,8 @@ int main(int argc, char* argv[]) {
     struct PlayerL : PlayerRoleListener {
         sl::SdlSink& sink;
         PlayerRole& player;
-        PlayerL(sl::SdlSink& s, PlayerRole& p) : sink(s), player(p) {}
+        sl::CecVolume* cec;
+        PlayerL(sl::SdlSink& s, PlayerRole& p, sl::CecVolume* c) : sink(s), player(p), cec(c) {}
         size_t on_audio_write(uint8_t* data, size_t len, uint32_t timeout_ms) override {
             return sink.write(data, len, timeout_ms);
         }
@@ -276,7 +306,10 @@ int main(int argc, char* argv[]) {
             fprintf(stderr, ">>> stream end\n");
             sink.clear();
         }
-        void on_volume_changed(uint8_t v) override { sink.set_volume(v); }
+        void on_volume_changed(uint8_t v) override {
+            if (cec) cec->set_volume(v);
+            else sink.set_volume(v);
+        }
         void on_mute_changed(bool m) override { sink.set_muted(m); }
     };
     struct MetaL : MetadataRoleListener {
@@ -308,7 +341,7 @@ int main(int argc, char* argv[]) {
         bool is_network_ready() override { return true; }
     };
 
-    PlayerL player_l(sink, player);
+    PlayerL player_l(sink, player, cec.get());
     MetaL meta_l;
     ClientL client_l;
     NetL net;
