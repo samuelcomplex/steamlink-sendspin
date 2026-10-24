@@ -1,15 +1,22 @@
 // Licensed under the Apache License, Version 2.0.
 #include "cec_volume.h"
 
+#include <spawn.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <cstdio>
 #include <cstdlib>
 
+extern char** environ;
+
 namespace sl {
 
-CecVolume::CecVolume(std::string helper, int steps) : helper_(std::move(helper)), steps_(steps) {
+CecVolume::CecVolume(std::string helper, int steps, int initial_volume)
+    : helper_(std::move(helper)), steps_(steps) {
+    if (initial_volume < 0) initial_volume = 0;
+    if (initial_volume > 100) initial_volume = 100;
+    target_ = sent_ = (initial_volume * steps_ + 50) / 100;
     worker_ = std::thread([this] { run_(); });
 }
 
@@ -28,12 +35,6 @@ void CecVolume::set_volume(int volume) {
     int pos = (volume * steps_ + 50) / 100;
     std::lock_guard<std::mutex> lock(m_);
     target_ = pos;
-    if (!have_baseline_) {
-        sent_ = pos;
-        have_baseline_ = true;
-        fprintf(stderr, ">>> receiver volume: following Music Assistant from %d%%\n", volume);
-        return;
-    }
     cv_.notify_all();
 }
 
@@ -52,11 +53,21 @@ void CecVolume::run_() {
 
         char count[8];
         snprintf(count, sizeof count, "%d", n);
+        // vfork-style spawn: a plain fork() would have to duplicate the player's large
+        // audio mappings and can fail on the Steam Link's small memory.
         int rc = -1;
-        pid_t pid = fork();
-        if (pid == 0) {
-            execl(helper_.c_str(), helper_.c_str(), cmd, count, (char*)nullptr);
-            _exit(127);
+        pid_t pid = -1;
+        char* args[] = {const_cast<char*>(helper_.c_str()), const_cast<char*>(cmd), count, nullptr};
+        posix_spawnattr_t attr;
+        posix_spawnattr_init(&attr);
+#ifdef POSIX_SPAWN_USEVFORK
+        posix_spawnattr_setflags(&attr, POSIX_SPAWN_USEVFORK);
+#endif
+        int err = posix_spawn(&pid, helper_.c_str(), nullptr, &attr, args, environ);
+        posix_spawnattr_destroy(&attr);
+        if (err != 0) {
+            pid = -1;
+            rc = 1000 + err;
         }
         if (pid > 0) {
             int status = 0;
@@ -66,6 +77,7 @@ void CecVolume::run_() {
         lock.lock();
         if (rc == 0) {
             sent_ += delta > 0 ? n : -n;
+            fprintf(stderr, ">>> receiver volume: %s %d\n", cmd, n);
         } else {
             fprintf(stderr, ">>> receiver volume: %s failed (%d); giving up on this change\n",
                     helper_.c_str(), rc);

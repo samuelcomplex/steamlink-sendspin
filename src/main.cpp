@@ -228,6 +228,17 @@ int main(int argc, char* argv[]) {
     sl::SdlSink sink;
     sink.extra_latency_us = static_cast<int64_t>(latency_ms) * 1000;
 
+    // The volume Music Assistant last set, so the player reports it on connecting (the library
+    // would report 0) and the receiver's position is known after a restart.
+    const std::string volume_file = state_file + ".volume";
+    // First start: half-way for a receiver (so the slider can go both ways), full level otherwise.
+    const int default_volume = cec_steps > 0 ? 50 : 100;
+    int saved_volume = default_volume;
+    if (std::ifstream vf(volume_file); !(vf >> saved_volume) || saved_volume < 0 ||
+                                       saved_volume > 100) {
+        saved_volume = default_volume;
+    }
+
     // Receiver volume over HDMI: the audio stays at full level and the receiver's own volume
     // follows Music Assistant. Mute stays in the player, where it can't get out of step.
     std::unique_ptr<sl::CecVolume> cec;
@@ -242,7 +253,8 @@ int main(int argc, char* argv[]) {
         }
         std::string helper = dir + "/slcec";
         if (access(helper.c_str(), X_OK) == 0) {
-            cec = std::make_unique<sl::CecVolume>(helper, cec_steps > 200 ? 200 : cec_steps);
+            cec = std::make_unique<sl::CecVolume>(helper, cec_steps > 200 ? 200 : cec_steps,
+                                                  saved_volume);
             fprintf(stderr, "sendspin: receiver volume over HDMI, %d steps for 0-100%%\n", cec_steps);
         } else {
             fprintf(stderr, "sendspin: %s not found; using the player's own volume\n", helper.c_str());
@@ -279,6 +291,8 @@ int main(int argc, char* argv[]) {
     };
     pc.fixed_delay_us = static_cast<int32_t>(delay_ms) * 1000;
     auto& player = client.add_player(std::move(pc));
+    player.update_volume(static_cast<uint8_t>(saved_volume));
+    if (!cec) sink.set_volume(static_cast<uint8_t>(saved_volume));
 #ifdef SENDSPIN_LEGACY_API
     player.set_static_delay_adjustable(true);
 #else
@@ -290,7 +304,9 @@ int main(int argc, char* argv[]) {
         sl::SdlSink& sink;
         PlayerRole& player;
         sl::CecVolume* cec;
-        PlayerL(sl::SdlSink& s, PlayerRole& p, sl::CecVolume* c) : sink(s), player(p), cec(c) {}
+        std::string volume_file;
+        PlayerL(sl::SdlSink& s, PlayerRole& p, sl::CecVolume* c, std::string vf)
+            : sink(s), player(p), cec(c), volume_file(std::move(vf)) {}
         size_t on_audio_write(uint8_t* data, size_t len, uint32_t timeout_ms) override {
             return sink.write(data, len, timeout_ms);
         }
@@ -309,6 +325,7 @@ int main(int argc, char* argv[]) {
         void on_volume_changed(uint8_t v) override {
             if (cec) cec->set_volume(v);
             else sink.set_volume(v);
+            std::ofstream(volume_file) << static_cast<int>(v) << "\n";
         }
         void on_mute_changed(bool m) override { sink.set_muted(m); }
     };
@@ -341,7 +358,7 @@ int main(int argc, char* argv[]) {
         bool is_network_ready() override { return true; }
     };
 
-    PlayerL player_l(sink, player, cec.get());
+    PlayerL player_l(sink, player, cec.get(), volume_file);
     MetaL meta_l;
     ClientL client_l;
     NetL net;
