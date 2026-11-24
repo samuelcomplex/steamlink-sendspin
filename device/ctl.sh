@@ -45,6 +45,20 @@ put() {
     cp -f "$1" "$2.new" && chmod +x "$2.new" && mv -f "$2.new" "$2"
 }
 
+# Reboots the Steam Link. The speaker pauses the Steam Link's own interface scripts and power
+# manager (so they can't take the audio device back), and a normal reboot waits for them and never
+# happens: resume them first, and force the reboot if the normal one still hasn't happened.
+restart_device() {
+    for pid in $(cat /var/run/sendspin-paused 2>/dev/null); do kill -CONT "$pid" 2>/dev/null; done
+    rm -f /var/run/sendspin-paused
+    sync
+    reboot
+    sleep 20
+    echo "Normal reboot didn't happen; forcing it."
+    sync
+    reboot -f
+}
+
 start_player() {
     # setsid so the player survives the SSH session ending
     if command -v setsid >/dev/null 2>&1; then
@@ -114,7 +128,7 @@ install)
         echo "The Steam Link's media server isn't running (left over from the previous version)."
         echo "Rebooting it now; the player starts by itself about a minute after boot."
         sync
-        reboot
+        restart_device
     fi
     ;;
 status)
@@ -154,13 +168,13 @@ ui)
     stop_player
     sync
     echo "The Steam Link will boot into its normal interface. Rebooting now..."
-    reboot
+    restart_device
     ;;
 speaker)
     touch $SS/enabled
     sync
     echo "The Steam Link will boot as a Sendspin speaker. Rebooting now..."
-    reboot
+    restart_device
     ;;
 uninstall)
     OVL=$(overlay_dir)
@@ -176,7 +190,7 @@ uninstall)
     rm -rf $SS $CFG
     sync
     echo "Removed. Rebooting into the original Steam Link interface..."
-    reboot
+    restart_device
     ;;
 *)
     sed -n '2,10p' "$0"
