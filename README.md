@@ -96,6 +96,10 @@ over again, so there's no need to restart the Steam Link. That speaker is silent
 15 seconds and then rejoins the music in sync by itself; other speakers in the same group keep
 playing throughout. The same goes for restarting the Steam Link while music is playing.
 
+Some receivers drop the HDMI link when switched to another input and never
+signal that it's back; then the speaker sets HDMI up again the next time music starts, or use
+**Reset HDMI**.
+
 From the app's **Manage** section, or with the script:
 
 | Action | App button | Script command |
@@ -103,6 +107,7 @@ From the app's **Manage** section, or with the script:
 | See what's installed and running | Check status | `status` |
 | Read the player's log | Show player log | `log` |
 | Restart the player | Restart player | `restart` |
+| Set up HDMI again (playing, but no sound) | Reset HDMI | `hdmi` |
 | Boot the normal Steam Link interface, keep the install | Use as Steam Link again | `ui` |
 | Boot as a speaker again | Use as speaker again | `speaker` |
 | Remove everything and restore the original startup | Remove from Steam Link | `uninstall` |

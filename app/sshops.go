@@ -19,7 +19,7 @@ import (
 
 // Commands the UI may run, mapped to ctl.sh subcommands on the device.
 var deviceCommands = map[string]bool{
-	"status": true, "log": true, "trace": true, "restart": true,
+	"status": true, "log": true, "trace": true, "restart": true, "hdmi": true,
 	"ui": true, "speaker": true, "uninstall": true,
 }
 

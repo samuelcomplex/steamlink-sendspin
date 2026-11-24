@@ -1,4 +1,6 @@
 #!/bin/sh
+# version 11 (2026-11-24): sets HDMI up again when music starts after the display dropped out,
+#   or on request (ctl.sh hdmi)
 # version 10 (2026-10-21): also runs from a USB stick ("usb" mode); finds Music Assistant itself
 #
 # sendspin-steamlink supervisor: runs the player, restarts it if it exits, and keeps the
@@ -19,6 +21,7 @@ MODE=installed
 PIDFILE=/var/run/sendspin-run.pid
 PAUSED=/var/run/sendspin-paused   # processes we paused, so they can be resumed
 PELOG=/mnt/scratch/log/PE_server.log
+WAKEREQ=/var/run/sendspin-wake-hdmi   # created by "ctl.sh hdmi" to ask for an HDMI reset
 
 if [ $MODE = usb ]; then
     SS=/tmp/sendspin                       # the player and this script, in RAM
@@ -54,7 +57,7 @@ fi
 echo $$ > $PIDFILE
 
 if [ $MODE = usb ]; then
-    sslog "supervisor version 10 starting (USB stick $USBDEV)"
+    sslog "supervisor version 11 starting (USB stick $USBDEV)"
     if [ -f /mnt/scratch/sendspin/enabled ]; then
         sslog "this Steam Link has the installed version; the USB stick isn't needed. Stopping."
         rm -f $PIDFILE
@@ -76,7 +79,7 @@ if [ $MODE = usb ]; then
         sslog "couldn't mount the USB stick for the log; keeping it in RAM"
     fi
 else
-    sslog "supervisor version 10 starting ($*)"
+    sslog "supervisor version 11 starting ($*)"
 fi
 
 NAME=""
@@ -140,6 +143,12 @@ hpd_state() {
     grep 'HPD=' $PELOG 2>/dev/null | tail -1 | sed -n 's/.*HPD=\([01]\).*/\1/p'
 }
 
+# How many times the player has started a stream. Its log is rotated at 1 MB, so this can drop.
+stream_count() {
+    n=$(grep -c '>>> stream start' $LOG 2>/dev/null)
+    echo "${n:-0}"
+}
+
 # USB version, stick removed: resume the Steam Link interface and its power manager, and let go
 # of the stick. Safe to run more than once.
 hand_back() {
@@ -194,9 +203,29 @@ stop_ui "stopped the Steam Link interface"
 (
     set +x
     seen=$(hpd_count)
+    down=0      # 1 while the display's last state was "gone"
+    starts=0
+    rm -f $WAKEREQ
     while active; do
         now=$(hpd_count)
-        if [ "$now" -gt "$seen" ] 2>/dev/null; then
+        if [ -f $WAKEREQ ]; then
+            rm -f $WAKEREQ
+            sslog "HDMI reset requested"
+            wake_hdmi
+            sleep 5
+            seen=$(hpd_count); down=0
+        elif [ $down = 1 ] && [ "$(stream_count)" -gt "$starts" ] 2>/dev/null; then
+            # Some receivers (the HK AVR 265 among them) pull HPD down when switched to another
+            # input, and the way back is never logged: the player then plays into a dead output.
+            # Music starting is the cue to set HDMI up again.
+            sslog "music started while the display was gone; setting up HDMI again"
+            wake_hdmi
+            sleep 5
+            seen=$(hpd_count)
+            if [ "$(hpd_state)" = 0 ]; then starts=$(stream_count); else down=0; fi
+        elif [ $down = 1 ] && [ "$(stream_count)" -lt "$starts" ] 2>/dev/null; then
+            starts=$(stream_count)   # the player log was rotated
+        elif [ "$now" -gt "$seen" ] 2>/dev/null; then
             # Receivers often drop and restore the link several times while they power up and
             # pick an input: wait until it has been quiet for a few seconds.
             quiet=0
@@ -208,8 +237,11 @@ stop_ui "stopped the Steam Link interface"
             if [ "$(hpd_state)" = 1 ]; then
                 wake_hdmi
                 sleep 5
+                down=0
             else
-                sslog "display disconnected; waiting for it to come back"
+                sslog "display disconnected; waiting for it to come back (or for music to start)"
+                down=1
+                starts=$(stream_count)
             fi
             seen=$(hpd_count)   # starting the interface can itself log a reconnect
         elif [ "$now" -lt "$seen" ] 2>/dev/null; then
