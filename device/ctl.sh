@@ -4,6 +4,7 @@
 #   ctl.sh status        show what's installed and running
 #   ctl.sh log           show the last lines of the player log
 #   ctl.sh restart       restart the player
+#   ctl.sh hdmi          set up HDMI again (no sound although playing) and rejoin the music
 #   ctl.sh ui            boot back into the normal Steam Link interface (keeps the install)
 #   ctl.sh speaker       boot as a Sendspin speaker again
 #   ctl.sh uninstall     remove everything and restore the original startup
@@ -137,6 +138,16 @@ restart)
     start_player
     sleep 4
     tail -n 12 $SS/log.txt
+    ;;
+hdmi)
+    if [ -f /var/run/sendspin-run.pid ] && kill -0 "$(cat /var/run/sendspin-run.pid)" 2>/dev/null; then
+        touch /var/run/sendspin-wake-hdmi
+        echo "Setting up HDMI again; the speaker is silent for about 20 seconds..."
+        sleep 22
+        tail -n 8 $SS/log.txt
+    else
+        echo "The speaker isn't running; use restart instead."
+    fi
     ;;
 ui)
     rm -f $SS/enabled
